@@ -11,6 +11,7 @@ dsh-zcf（DeepSeek Zero-Config Flow）是 DeepSeek Harness 的一键配置向导
 ## 特性
 
 - **一条命令，零配置**——把一台裸机带到可验证的 `dsh` 部署，只需一次 `npx`。
+- **步骤可回退**——交互流程中任意问题按 Esc 返回上一步，已答内容保留为默认值（直接回车即可前进）；第一个问题按 Esc 取消。
 - **构造即安全**——Key 在输入时掩码，写入仅属主可读的受管凭据文档，跨进程写锁内原子提交；绝不回显，摘要里始终掩码（`sk-***4321`）。
 - **可验证而非假设**——向导用 `dsh --dump-default-config` 证明所选 profile 能组装，在调用任何模型前闭环已 keyless。
 - **自包含 tarball**——复用的私有 `@deepseek-ai` 工具在构建期即打入 bin，`npx` 只解析公共 npm 包，绝不触碰私有 scope。

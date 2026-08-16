@@ -251,6 +251,10 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '{ref}（输入不回显，留空跳过）：',
     'en': '{ref} (hidden input, leave empty to skip):',
   },
+  backHint: {
+    'zh-CN': '（提示：任意问题按 Esc 返回上一步，已答内容会保留为默认值；第一个问题按 Esc 取消）',
+    'en': '(Tip: press Esc on any question to step back — prior answers are kept as defaults; Esc on the first question cancels.)',
+  },
   pluginPrompt: {
     'zh-CN': '选择推荐插件（空格选择，回车确认，可多选）：',
     'en': 'Select recommended plugins (space to pick, enter to confirm, multi-select):',

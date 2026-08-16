@@ -16,8 +16,8 @@ export type PromptQuestion =
   | { type: 'confirm'; name: string; message: string; default?: boolean }
   | { type: 'password'; name: string; message: string }
   | { type: 'input'; name: string; message: string; default?: string }
-  | { type: 'list'; name: string; message: string; choices: readonly { name: string; value: string }[] }
-  | { type: 'multiselect'; name: string; message: string; choices: readonly { name: string; value: string }[] }
+  | { type: 'list'; name: string; message: string; choices: readonly { name: string; value: string }[]; initial?: string }
+  | { type: 'multiselect'; name: string; message: string; choices: readonly { name: string; value: string }[]; initial?: readonly string[] }
 
 /** One prompt batch's result: answered values, or a user cancellation. */
 export type PromptOutcome = { status: 'answered'; value: Readonly<Record<string, unknown>> } | { status: 'cancelled' }
@@ -64,6 +64,7 @@ export function createPromptPort(input: Readable = process.stdin, output: Writab
           result = await select({
             message: question.message,
             options: question.choices.map(choice => ({ value: choice.value, label: choice.name })),
+            ...(question.initial === undefined ? {} : { initialValue: question.initial }),
             input,
             output,
           })
@@ -73,6 +74,7 @@ export function createPromptPort(input: Readable = process.stdin, output: Writab
           result = await multiselect({
             message: question.message,
             options: question.choices.map(choice => ({ value: choice.value, label: choice.name })),
+            ...(question.initial === undefined ? {} : { initialValues: [...question.initial] }),
             input,
             output,
           })
