@@ -1,0 +1,44 @@
+{
+  "name": "dsh-zcf",
+  "description": "dsh-zcf: zero-config DeepSeek Harness setup wizard — install dsh, store provider credentials, and pick a runnable profile",
+  "version": "0.0.1-rc.8",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AdamPlatin123/dsh-zcf.git"
+  },
+  "type": "module",
+  "bin": {
+    "dsh-zcf": "lib/bin.js"
+  },
+  "files": [
+    "lib/*.js"
+  ],
+  "license": "BSD-3-Clause",
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.7.0",
+    "ansis": "^4.1.0",
+    "commander": "^15.0.0",
+    "js-yaml": "^4.2.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-atomic-write": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-home-paths": "^0.1.0-rc.6",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.20.0",
+    "tsdown": "^0.15.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  }
+}

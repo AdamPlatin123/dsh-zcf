@@ -1,0 +1,128 @@
+[![npm version](https://img.shields.io/npm/v/dsh-zcf?style=flat&colorA=080f12&colorB=1fa669)](https://www.npmjs.com/package/dsh-zcf)
+[![License](https://img.shields.io/badge/license-BSD--3--Clause-1fa669?style=flat&colorA=080f12&colorB=1fa669)](https://github.com/deepseek-ai/deepseek-harness)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek-Harness-1fa669?style=flat&colorA=080f12&colorB=1fa669)](https://github.com/deepseek-ai/deepseek-harness)
+
+# `dsh-zcf`
+
+English | [中文](README.zh.md)
+
+dsh-zcf (DeepSeek Zero-Config Flow) is the one-command setup wizard for DeepSeek Harness. It takes a machine from nothing to a runnable `dsh` deployment: installs the `dsh` CLI when missing, stores the DeepSeek API key (and optional endpoint override) in the harness-home credentials document, and proves the chosen profile composes.
+
+## Features
+
+- **One command, zero config** — take a bare machine to a verified `dsh` deployment in a single `npx`.
+- **Safe by construction** — keys are masked at the prompt, written to the owner-only managed credentials document under a cross-process lock, and committed atomically. They are never echoed; the summary masks them (`sk-***4321`).
+- **Verified, not assumed** — the wizard proves the chosen profile composes via `dsh --dump-default-config`, so the loop is keyless before you ever call a model.
+- **Self-contained tarball** — the private `@deepseek-ai` utilities it reuses are bundled into the bin at build time, so an `npx` run resolves only public npm packages and never the private scope.
+- **Scriptable** — full non-interactive mode (`--key`, `--mode`, `--yes`, `--dry-run`) for CI and provisioning.
+- **Bilingual UI** — `--lang zh-CN|en` (default `zh-CN`).
+- **Extensible** — opt into Exa/Perplexity search, SQLite history, a persistent terminal, LSP navigation, Codex/Claude delegation, or an MCP server.
+
+## Quick start
+
+```sh
+npx dsh-zcf            # interactive menu: init / plugin market / manage / advanced / credentials
+npx dsh-zcf i          # full init (same as the bare command)
+npx dsh-zcf n          # recommended-plugin market
+dsh-zcf --help          # grammar (after a global install)
+```
+
+Non-interactive (CI, scripts):
+
+```sh
+dsh-zcf i --key sk-… --mode tui --yes
+dsh-zcf i --key sk-… --mode web --base-url https://relay.example.com --yes
+dsh-zcf n --plugin dsh-lens,dsh-spend           # install two picks (default dzcf profile)
+dsh-zcf l --plugin dsh-lens                     # remove from the dzcf profile
+dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
+```
+
+## What it does
+
+1. **Detects `dsh`** (`dsh -V`). Missing? The wizard states the cost up front (`@deepseek-ai/dsh` is a full distribution: 60+ sub-packages and hundreds of dependencies; roughly 5–15 minutes from the official registry, 1–2 from a mirror), measures the round-trip latency of the official registry and the Aliyun mirror in interactive mode and lists the faster one first, and streams installer output line by line with an elapsed-time report. `--registry <url>` pins the registry without probing; non-interactive runs keep the package manager's own registry and never switch silently. `--yes` skips the question; a run without a package manager fails loud.
+2. **Collects inputs** — the DeepSeek API key (masked prompt), an optional `DEEPSEEK_BASE_URL` override, and the runtime surface: `tui` (Claude Code-style terminal UI), `web` (browser UI), or `app` (Tauri 2 desktop shell, macOS/Windows). Interactive mode asks; non-interactive mode requires `--key` and `--mode` and fails loud otherwise.
+3. **Stores credentials** in `$DSH_HOME/.credentials.yaml` — the managed, owner-only (0600 under 0700) document that `dsh-credentials-local` reads. Existing untouched entries survive; writes re-read under the cross-process writer lock and commit atomically. Keys are never echoed: the summary masks them (`sk-***4321`).
+4. **Verifies the profile** with `dsh --profile <mode> --dump-default-config` — the shipped `web`/`headless` profiles auto-initialize on first boot, so a successful dump proves the zero-config loop without a model call. Failures report the dsh stderr; the stored credentials remain.
+5. **Prints next steps** — `dsh web`, or `dsh --profile dzcf` for tui/app surfaces (default profile name dzcf; override with `--profile`).
+
+Nothing else is touched: no profile files are rewritten, no `cordis.yml` is generated, and the wizard itself never calls a model API.
+
+## Options
+
+| Option | Meaning |
+|---|---|
+| `i` | Full init (same as the bare command). |
+| `n` | Recommended-plugin market: multi-select from the 20 curated picks (default dzcf profile). |
+| `l` | Manage installed plugins: list and remove picked ones (default dzcf profile). |
+| `c` | Advanced integrations; requires `--profile` and `--with`. |
+| `k` | Update credentials only (key / base URL). |
+| `-k, --key <key>` | API key; skip the masked prompt. |
+| `--base-url <url>` | Endpoint override; any http(s) URL, else exit 1. |
+| `-m, --mode <mode>` | `tui`, `web`, or `app`; skip the list prompt. |
+| `-l, --lang <lang>` | Interface language: `zh-CN` (default) or `en`. |
+| `-y, --yes` | Assume yes for the install and write confirmations. |
+| `-p, --profile <name>` | Custom profile name for integration options. |
+| `--with <list>` | Integration ids, comma-separated (`exa,terminal,lsp`). |
+| `--mcp-command <cmd>` | MCP server launch command (non-interactive `--with mcp`). |
+| `--registry <url>` | npm registry for the dsh install; any http(s) URL, else exit 1. |
+| `--plugin <list>` | Recommended-plugin npm names, comma-separated (`dsh-lens,dsh-spend`); installs in init, removes in manage. |
+| `--dry-run` | Print the planned writes and verify command, touch nothing. |
+| `-V, --version` | Print the version and exit. |
+
+## Recommended plugins (20 curated picks)
+
+The `n` market and the init multiselect, all runtime-verified entries from the community radar [awesome-dsh-plugins](https://github.com/AdamPlatin123/awesome-dsh-plugins); more at [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin).
+
+| Direction | Plugin | Effect |
+|---|---|---|
+| Coding | `dsh-lens` | Live feedback on file writes: LSP, linter, formatter, ast-grep, symbol search. |
+| Coding | `dsh-ci-doctor` | Background CI failure watcher with log-signature diagnosis. |
+| Coding | `dsh-file-review` | Review agent file modifications in a diff view. |
+| Agent | `dsh-subagent-tools` | Per-call overrides for subagent model/provider/persona and tool filter. |
+| Agent | `dsh-mcp-adapter` | On-demand MCP search/describe/call proxy keeping schemas out of context. |
+| Agent | `billion-context-dsh` | Model-driven context compression with compress/decompress/search. |
+| Web UI | `dsh-office` | Floating workspace/session dashboard with token and subagent views. |
+| Web UI | `dsh-spend` | Token usage and estimated cost floating window. |
+| Web UI | `dsh-turn-index` | Turn-by-turn question index sidebar with click-to-jump. |
+| Web UI | `dsh-outline` | Live outline tree from questions and Markdown headings. |
+| Web UI | `dsh-genui` | Inline GenUI: charts, forms, quizzes, 3D scenes. |
+| Memory | `dsh-mnemon` | Three-tier local memory (runtime/project/long-term) with web UI. |
+| Memory | `dsh-memento` | Bounded, approval-gated cross-session memory. |
+| Messaging | `dsh-lark-bot` | Feishu/Lark bridge: streaming cards, worktree isolation. |
+| Messaging | `dsh-dingtalk` | DingTalk group-robot notifications via signed webhook. |
+| Files & safety | `dsh-artifact` | Organize and browse session artifacts. |
+| Files & safety | `dsh-security-scan` | Scans secrets and dangerous patterns, redacts keys/tokens. |
+| Infra guard | `dsh-plugin-guard` | Snapshot/rollback safety net for plugin install/uninstall. |
+| Infra guard | `dsh-plugin-audit` | Static permission profiler plus runtime sentinel. |
+| Web access | `dsh-web-access` | Multi-provider web search/fetch/source check with web panel. |
+
+## Advanced integrations (official seam options)
+
+The wizard can extend a deployment with capabilities beyond the shipped `web`/`headless` surfaces. Selecting any option creates a custom profile (`--profile <name>`, default `dzcf`) and installs the capability through the launcher's own `dsh plugin add`, then writes its patch rows and verifies the composition:
+
+| Option | Effect |
+|---|---|
+| `exa` | Register the Exa search provider (`EXA_API_KEY` → `$DSH_HOME/.env`). |
+| `perplexity` | Register the Perplexity search provider (`PERPLEXITY_API_KEY` → `$DSH_HOME/.env`). |
+| `sqlite` | Persist session history in SQLite (replaces the JSONL default). |
+| `terminal` | Add the persistent PTY terminal tool. |
+| `lsp` | Add language-server symbol navigation (service + stdio backend + tool). |
+| `codex` | Delegate subtasks to a local Codex CLI (requires `codex` installed). |
+| `claude` | Delegate subtasks to a local Claude Code (requires `claude` installed). |
+| `mcp` | Attach one MCP server (enter its launch command). |
+
+Interactive mode asks a multiselect; non-interactive uses `--with exa,terminal,lsp` and `--profile <name>`. Provider keys are prompted only in interactive mode.
+
+
+## Development
+
+The wizard is a menu-driven CLI over three injectable seams — `RunFn` (subprocesses), `PromptFn` (@clack/prompts port), and the harness home — so the whole flow is testable without a TTY. The published tarball is self-contained: the two `@deepseek-ai` utilities it reuses (`dsh-home-paths`, `dsh-atomic-write`) are bundled into the bin at build time (`noExternal`), so an npx run resolves only public npm packages and never the private `@deepseek-ai` scope. Source launch from the repository root: `pnpm dzcf <args...>` (tsx ESM hook; no build needed). Unit specs cover the grammar, the credentials and env-file contracts, the capability catalog, the profile patch writer, and the wizard flows; the keyless snapshot replays the real entry end to end against a fixture `dsh` on the PATH.
+## Known limitations
+
+- The base-URL prompt accepts any http(s) URL; reachability and key validity are not checked — the first real request owns that failure.
+- Credential writes are atomic but not crash-durable (inherited from `dsh-atomic-write`); the document is re-read on every boot.
+- On Windows the 0600/0700 permission checks are skipped, matching `dsh-credentials-local`.
+
+## License
+
+Released under the [BSD-3-Clause](https://github.com/deepseek-ai/deepseek-harness) license as part of DeepSeek Harness.

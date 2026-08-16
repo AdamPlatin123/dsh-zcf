@@ -1,0 +1,323 @@
+/**
+ * Bilingual user-facing strings for the dsh-zcf wizard. One table, two
+ * languages; `--lang` picks the active column and `translate()` interpolates
+ * `{name}` parameters. No i18n framework: the surface is small and the table
+ * is the whole contract.
+ * @module dsh-zcf
+ */
+
+/** Active interface language. */
+export type Lang = 'zh-CN' | 'en'
+
+/** Message key → per-language text. */
+export type MessageTable = Readonly<Record<string, Readonly<Record<Lang, string>>>>
+
+/**
+ * Render one message in `lang`, substituting `{key}` placeholders from
+ * `params`. Unknown keys are the literal placeholder, so a message can never
+ * claim a value it was not given.
+ * @param table - message table.
+ * @param lang - active language.
+ * @param key - message key.
+ * @param params - placeholder values.
+ * @returns the rendered text.
+ */
+export function translate(table: MessageTable, lang: Lang, key: string, params: Readonly<Record<string, string>> = {}): string {
+  const text = table[key]?.[lang] ?? table[key]?.en ?? key
+  return text.replace(/\{(\w+)\}/g, (match, name: string) => {
+    const value = params[name]
+    return value === undefined ? match : value
+  })
+}
+
+export const MESSAGES: MessageTable = {
+  banner: {
+    'zh-CN': 'dsh-zcf — DeepSeek Harness 零配置引导（数据目录：{home}）',
+    'en': 'dsh-zcf — zero-config DeepSeek Harness setup (data home: {home})',
+  },
+  dshFound: {
+    'zh-CN': '✓ 已找到 dsh 命令',
+    'en': '✓ dsh command found',
+  },
+  dshMissing: {
+    'zh-CN': '未找到 dsh 命令，需要先安装 @deepseek-ai/dsh。',
+    'en': 'dsh command not found; @deepseek-ai/dsh must be installed first.',
+  },
+  dshMissingNoTty: {
+    'zh-CN': '未找到 dsh 命令。请先安装（如 `npm install -g @deepseek-ai/dsh`），或加 `--yes` 让 dsh-zcf 代为安装。',
+    'en': 'dsh command not found. Install it first (e.g. `npm install -g @deepseek-ai/dsh`), or pass `--yes` to let dsh-zcf install it.',
+  },
+  installConfirm: {
+    'zh-CN': '现在用 {pm} 全局安装 @deepseek-ai/dsh 吗？',
+    'en': 'Install @deepseek-ai/dsh globally with {pm} now?',
+  },
+  installSizeNotice: {
+    'zh-CN': '@deepseek-ai/dsh 是完整发行版：60+ 个子包、数百个依赖。官方源安装约需 5–15 分钟，镜像源约 1–2 分钟；安装过程会实时输出进度。',
+    'en': '@deepseek-ai/dsh is a full distribution: 60+ sub-packages and hundreds of dependencies. Expect roughly 5–15 minutes from the official registry, 1–2 minutes from a mirror; install progress streams live.',
+  },
+  registryPrompt: {
+    'zh-CN': '选择 npm 安装源（括号为实测往返延迟）：',
+    'en': 'Pick an npm registry (measured round-trip latency in parentheses):',
+  },
+  registryOfficial: {
+    'zh-CN': '官方源 registry.npmjs.org（{ms}）',
+    'en': 'Official registry.npmjs.org ({ms})',
+  },
+  registryMirror: {
+    'zh-CN': '阿里云镜像 registry.npmmirror.com（{ms}）',
+    'en': 'Aliyun mirror registry.npmmirror.com ({ms})',
+  },
+  registryUnreachable: {
+    'zh-CN': '不可达',
+    'en': 'unreachable',
+  },
+  registryGiven: {
+    'zh-CN': '使用指定安装源：{registry}',
+    'en': 'Using the configured registry: {registry}',
+  },
+  registryProbeNone: {
+    'zh-CN': '（两个安装源都未在 3 秒内应答，使用官方源安装）',
+    'en': '(Neither registry answered within 3 s; installing from the official one)',
+  },
+  installElapsed: {
+    'zh-CN': '安装耗时 {seconds} 秒',
+    'en': 'Install finished in {seconds}s',
+  },
+  noPackageManager: {
+    'zh-CN': '没有可用的包管理器（需要 npm 或 pnpm）来安装 dsh。',
+    'en': 'No package manager available (npm or pnpm required) to install dsh.',
+  },
+  installing: {
+    'zh-CN': '正在安装：{command}',
+    'en': 'Installing: {command}',
+  },
+  installFailed: {
+    'zh-CN': '安装 dsh 失败：{stderr}',
+    'en': 'Installing dsh failed: {stderr}',
+  },
+  installNoDsh: {
+    'zh-CN': '安装命令结束但 dsh 仍然不可用，请检查 PATH。',
+    'en': 'The install command finished but dsh is still unavailable; check your PATH.',
+  },
+  dshInstalled: {
+    'zh-CN': '✓ dsh 安装完成',
+    'en': '✓ dsh installed',
+  },
+  apiKeyPrompt: {
+    'zh-CN': 'DeepSeek API Key（sk-…，输入不回显）：',
+    'en': 'DeepSeek API key (sk-…, hidden input):',
+  },
+  baseUrlPrompt: {
+    'zh-CN': 'API Base URL（留空使用官方地址 {default}）：',
+    'en': 'API base URL (leave empty for the official endpoint {default}):',
+  },
+  modePrompt: {
+    'zh-CN': '选择运行形态：',
+    'en': 'Pick a runtime surface:',
+  },
+  modeTui: {
+    'zh-CN': 'tui — 终端 UI（Claude Code 风格，`dsh --profile <名字>` 启动）',
+    'en': 'tui — terminal UI (Claude Code style, launched as `dsh --profile <name>`)',
+  },
+  modeWeb: {
+    'zh-CN': 'web — 浏览器 UI（`dsh web`，默认 http://127.0.0.1:3080）',
+    'en': 'web — browser UI (`dsh web`, default http://127.0.0.1:3080)',
+  },
+  modeApp: {
+    'zh-CN': 'app — 桌面应用壳（Tauri 2，macOS/Windows；Linux 建议选 tui 或 web）',
+    'en': 'app — desktop shell (Tauri 2, macOS/Windows; on Linux prefer tui or web)',
+  },
+  missingKey: {
+    'zh-CN': '缺少 API Key：请用 `--key sk-…` 传入，或在交互模式下输入。',
+    'en': 'Missing API key: pass `--key sk-…` or enter it interactively.',
+  },
+  badBaseUrl: {
+    'zh-CN': '无效的 Base URL：{url}（需要 http:// 或 https:// 地址）。',
+    'en': 'Invalid base URL: {url} (an http:// or https:// URL is required).',
+  },
+  missingMode: {
+    'zh-CN': '缺少运行形态：请用 `--mode headless|web` 指定，或在交互模式下选择。',
+    'en': 'Missing mode: pass `--mode headless|web` or pick it interactively.',
+  },
+  credentialsReadFailed: {
+    'zh-CN': '读取凭据文件失败：{path}（{reason}）。修好或删除该文件后重试。',
+    'en': 'Reading the credentials file failed: {path} ({reason}). Fix or remove it and retry.',
+  },
+  summary: {
+    'zh-CN': '即将执行：\n{lines}',
+    'en': 'About to run:\n{lines}',
+  },
+  proceedConfirm: {
+    'zh-CN': '继续吗？',
+    'en': 'Proceed?',
+  },
+  cancelled: {
+    'zh-CN': '已取消，未做任何修改。',
+    'en': 'Cancelled; nothing was changed.',
+  },
+  dryRunNotice: {
+    'zh-CN': '（dry-run：以下操作不会真正执行）',
+    'en': '(dry run: the actions below are not executed)',
+  },
+  credentialsWritten: {
+    'zh-CN': '✓ 凭据已写入 {path}（0600）：{refs}',
+    'en': '✓ Credentials written to {path} (0600): {refs}',
+  },
+  verifying: {
+    'zh-CN': '正在验证 {mode} profile 可以组装……',
+    'en': 'Verifying the {mode} profile composes…',
+  },
+  verifyFailed: {
+    'zh-CN': '验证失败：dsh 无法组装 {mode} profile（{stderr}）。凭据已写入，profile 需自行排查。',
+    'en': 'Verification failed: dsh cannot compose the {mode} profile ({stderr}). Credentials were written; the profile needs manual repair.',
+  },
+  verified: {
+    'zh-CN': '✓ {mode} profile 组装成功',
+    'en': '✓ {mode} profile composes',
+  },
+  nextSteps: {
+    'zh-CN': '下一步：{command}',
+    'en': 'Next: {command}',
+  },
+  noWrites: {
+    'zh-CN': '（本次没有需要写入的变化，凭据已是最新）',
+    'en': '(no changes to write; credentials are already current)',
+  },
+  menuTitle: {
+    'zh-CN': '请选择操作：',
+    'en': 'Pick an action:',
+  },
+  menuInit: {
+    'zh-CN': '1. 完整初始化 — 凭据 + 运行形态 + 推荐插件（推荐）',
+    'en': '1. Full init — credentials + runtime surface + recommended plugins (recommended)',
+  },
+  menuMarketplace: {
+    'zh-CN': '2. 推荐插件市场 — 浏览 20 个精选插件并安装到 profile',
+    'en': '2. Recommended plugins — browse the 20 curated picks and install into a profile',
+  },
+  menuManage: {
+    'zh-CN': '3. 管理已装插件 — 列出 profile 的插件并选择移除',
+    'en': '3. Manage installed plugins — list a profile\'s plugins and pick ones to remove',
+  },
+  menuConfigure: {
+    'zh-CN': '4. 高级集成 — 官方接缝选项（搜索提供商、SQLite、MCP 等）',
+    'en': '4. Advanced integrations — official seam options (search providers, SQLite, MCP, …)',
+  },
+  menuCredentials: {
+    'zh-CN': '5. 更新凭据 — 仅更新 Key / Base URL',
+    'en': '5. Update credentials — refresh only the key / base URL',
+  },
+  profileNamePrompt: {
+    'zh-CN': '给这个定制形态起个名字（之后用 `dsh --profile <名字>` 启动，默认 dzcf）：',
+    'en': 'Name this custom deployment (launched later as `dsh --profile <name>`, default dzcf):',
+  },
+  integrationPrompt: {
+    'zh-CN': '选择要集成的能力（空格选择，回车确认）：',
+    'en': 'Select capabilities to integrate (space to pick, enter to confirm):',
+  },
+  mcpCommandPrompt: {
+    'zh-CN': 'MCP 服务器启动命令（如 npx -y @modelcontextprotocol/server-filesystem /tmp）：',
+    'en': 'MCP server launch command (e.g. npx -y @modelcontextprotocol/server-filesystem /tmp):',
+  },
+  addingCapability: {
+    'zh-CN': '正在集成 {capability}……',
+    'en': 'Integrating {capability}…',
+  },
+  profileCreated: {
+    'zh-CN': '✓ 已创建 profile：{profile}',
+    'en': '✓ Profile created: {profile}',
+  },
+  capabilityInstalled: {
+    'zh-CN': '✓ {capability} 已集成',
+    'en': '✓ {capability} integrated',
+  },
+  envWritten: {
+    'zh-CN': '✓ 环境变量已写入 {path}：{refs}',
+    'en': '✓ Environment written to {path}: {refs}',
+  },
+  noIntegration: {
+    'zh-CN': '未选择集成选项，使用内置 {mode} profile。',
+    'en': 'No integrations selected; using the shipped {mode} profile.',
+  },
+  missingProfile: {
+    'zh-CN': '缺少 profile 名称：请用 `--profile <name>` 指定。',
+    'en': 'Missing profile name: pass `--profile <name>`.',
+  },
+  missingWith: {
+    'zh-CN': '缺少集成选项：请用 `--with exa,pty,lsp,...` 指定。',
+    'en': 'Missing integration options: pass `--with exa,pty,lsp,...`.',
+  },
+  envKeyPrompt: {
+    'zh-CN': '{ref}（输入不回显，留空跳过）：',
+    'en': '{ref} (hidden input, leave empty to skip):',
+  },
+  pluginPrompt: {
+    'zh-CN': '选择推荐插件（空格选择，回车确认，可多选）：',
+    'en': 'Select recommended plugins (space to pick, enter to confirm, multi-select):',
+  },
+  pluginInstalling: {
+    'zh-CN': '正在安装插件 {plugin}……',
+    'en': 'Installing plugin {plugin}…',
+  },
+  pluginInstalled: {
+    'zh-CN': '✓ {plugin} 已安装并登记',
+    'en': '✓ {plugin} installed and registered',
+  },
+  pluginInstallFailed: {
+    'zh-CN': '安装 {plugin} 失败：{stderr}',
+    'en': 'Installing {plugin} failed: {stderr}',
+  },
+  marketplaceNone: {
+    'zh-CN': '未选择任何插件，未做修改。',
+    'en': 'No plugins selected; nothing changed.',
+  },
+  marketplaceSource: {
+    'zh-CN': '精选自社区雷达 awesome-dsh-plugins（运行级验证通过）；更多插件见 https://github.com/awesome-dsh-plugin/awesome-dsh-plugin',
+    'en': 'Curated from the community radar awesome-dsh-plugins (runtime-verified); more at https://github.com/awesome-dsh-plugin/awesome-dsh-plugin',
+  },
+  manageMissing: {
+    'zh-CN': 'profile 不存在：{profile}。先运行完整初始化或插件市场创建它。',
+    'en': 'Profile not found: {profile}. Create it with full init or the marketplace first.',
+  },
+  manageEmpty: {
+    'zh-CN': '该 profile 没有已登记的插件（仅基础 bundle）。',
+    'en': 'This profile has no registered plugins (base bundle only).',
+  },
+  manageListHeader: {
+    'zh-CN': '已登记的插件：',
+    'en': 'Registered plugins:',
+  },
+  manageRemovePrompt: {
+    'zh-CN': '选择要移除的插件（空格选择，回车确认；不选则保留全部）：',
+    'en': 'Pick plugins to remove (space to pick, enter to confirm; none keeps everything):',
+  },
+  pluginRemoving: {
+    'zh-CN': '正在移除插件 {plugin}……',
+    'en': 'Removing plugin {plugin}…',
+  },
+  pluginRemoved: {
+    'zh-CN': '✓ {plugin} 已移除',
+    'en': '✓ {plugin} removed',
+  },
+  pluginRemoveFailed: {
+    'zh-CN': '移除 {plugin} 失败：{stderr}',
+    'en': 'Removing {plugin} failed: {stderr}',
+  },
+  nextStepsTui: {
+    'zh-CN': '下一步：dsh --profile {profile}（终端 UI）',
+    'en': 'Next: dsh --profile {profile} (terminal UI)',
+  },
+  nextStepsApp: {
+    'zh-CN': '下一步：dsh --profile {profile}（按 dsh-desktop-app 的说明启动桌面壳）',
+    'en': 'Next: dsh --profile {profile} (launch the desktop shell per dsh-desktop-app instructions)',
+  },
+} as const
+
+/** Official DeepSeek API endpoint the base bundle defaults to. */
+export const PUBLIC_BASE_URL = 'https://api.deepseek.com'
+
+/** Credential reference the shipped llm-deepseek adapter resolves per request. */
+export const API_KEY_REF = 'DEEPSEEK_API_KEY'
+
+/** Environment variable naming the adapter's endpoint override. */
+export const BASE_URL_REF = 'DEEPSEEK_BASE_URL'
