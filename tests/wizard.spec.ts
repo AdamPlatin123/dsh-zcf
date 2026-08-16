@@ -328,7 +328,7 @@ describe('runWizard — interactive', () => {
     expect(lines.join('\n')).toContain('已取消')
   })
 
-  it('aborts on a cancelled prompt', async () => {
+  it('cancels gently when Esc lands on the first question', async () => {
     const home = await tempHome()
     const { prompt } = scriptedPrompt({})
     const lines: string[] = []
@@ -342,9 +342,52 @@ describe('runWizard — interactive', () => {
       interactive: true,
       ...outputLines(lines),
     }, { ...OPTIONS })
-    expect(code).toBe(1)
+    expect(code).toBe(0)
     expect(lines.join('\n')).toContain('已取消')
     expect(readCredentials(home)).toEqual({})
+  })
+
+  it('steps back on Esc and re-asks with the prior answer as default', async () => {
+    const home = await tempHome()
+    const asked: PromptQuestion[] = []
+    let baseUrlAskCount = 0
+    const prompt = async (questions: readonly PromptQuestion[]): Promise<PromptOutcome> => {
+      const question = questions[0]
+      if (question === undefined) return { status: 'cancelled' }
+      asked.push(question)
+      switch (question.name) {
+        case 'key': return { status: 'answered', value: { key: 'sk-typed' } }
+        case 'baseUrl': {
+          baseUrlAskCount += 1
+          // First ask is answered; the re-ask (after Esc on the surface step) must carry the prior value as default.
+          if (baseUrlAskCount === 1) return { status: 'answered', value: { baseUrl: 'https://relay.example.com' } }
+          expect((question as { default?: string }).default).toBe('https://relay.example.com')
+          return { status: 'answered', value: { baseUrl: 'https://relay.example.com' } }
+        }
+        case 'mode': return baseUrlAskCount === 1
+          ? { status: 'cancelled' }
+          : { status: 'answered', value: { mode: 'web' } }
+        case 'plugins': return { status: 'answered', value: { plugins: [] } }
+        case 'proceed': return { status: 'answered', value: { proceed: true } }
+        default: return { status: 'cancelled' }
+      }
+    }
+    const lines: string[] = []
+    const code = await runWizard({
+      home,
+      lang: 'zh-CN',
+      run: scriptedRun().run,
+      installDsh: scriptedInstall().installDsh,
+      probeRegistry: NO_PROBE,
+      prompt,
+      interactive: true,
+      ...outputLines(lines),
+    }, { ...OPTIONS })
+    expect(code).toBe(0)
+    expect(baseUrlAskCount).toBe(2)
+    expect(asked.filter(question => question.name === 'baseUrl')).toHaveLength(2)
+    expect(lines.join('\n')).toContain('按 Esc 返回上一步')
+    expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-typed', DEEPSEEK_BASE_URL: 'https://relay.example.com' })
   })
 })
 

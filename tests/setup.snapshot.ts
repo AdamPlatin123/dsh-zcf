@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest'
  * credentials document — the zero-config loop in one replay.
  */
 
-const ROOT = fileURLToPath(new URL('..', import.meta.url))
+const ROOT = fileURLToPath(new URL('../../..', import.meta.url))
 const BIN = fileURLToPath(new URL('../src/bin.ts', import.meta.url))
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url))
 

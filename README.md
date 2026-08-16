@@ -11,6 +11,7 @@ dsh-zcf (DeepSeek Zero-Config Flow) is the one-command setup wizard for DeepSeek
 ## Features
 
 - **One command, zero config** — take a bare machine to a verified `dsh` deployment in a single `npx`.
+- **Navigable steps** — press Esc on any interactive question to step back; prior answers persist as defaults (enter alone moves forward). Esc on the first question cancels.
 - **Safe by construction** — keys are masked at the prompt, written to the owner-only managed credentials document under a cross-process lock, and committed atomically. They are never echoed; the summary masks them (`sk-***4321`).
 - **Verified, not assumed** — the wizard proves the chosen profile composes via `dsh --dump-default-config`, so the loop is keyless before you ever call a model.
 - **Self-contained tarball** — the private `@deepseek-ai` utilities it reuses are bundled into the bin at build time, so an `npx` run resolves only public npm packages and never the private scope.

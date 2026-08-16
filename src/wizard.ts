@@ -180,50 +180,6 @@ async function ensureDsh(context: WizardContext, t: T, options: DzcfOptions): Pr
   return true
 }
 
-/** Prompt for and validate the API key; null on abort. */
-async function collectKey(context: WizardContext, t: T, options: DzcfOptions): Promise<string | null> {
-  const answer = await askValue(context, t, { type: 'password', name: 'key', message: t('apiKeyPrompt') }, options.key)
-  if (answer.status !== 'value') return null
-  if (answer.value.length === 0) {
-    context.err(t('missingKey'))
-    return null
-  }
-  return answer.value
-}
-
-/** Prompt for and validate the base URL; empty means the official endpoint. */
-async function collectBaseUrl(context: WizardContext, t: T, options: DzcfOptions): Promise<string | null> {
-  let baseUrl = ''
-  if (options.baseUrl !== undefined) {
-    baseUrl = options.baseUrl
-  } else if (context.interactive) {
-    const answer = await askValue(context, t, { type: 'input', name: 'baseUrl', message: t('baseUrlPrompt', { default: PUBLIC_BASE_URL }), default: '' }, undefined)
-    if (answer.status !== 'value') return null
-    baseUrl = answer.value
-  }
-  if (baseUrl !== '' && !isHttpUrl(baseUrl)) {
-    context.err(t('badBaseUrl', { url: baseUrl }))
-    return null
-  }
-  return baseUrl
-}
-
-/** Resolve the runtime surface; null on abort. */
-async function collectSurface(context: WizardContext, t: T, options: DzcfOptions): Promise<Surface | null> {
-  const answer = await askValue(context, t, {
-    type: 'list',
-    name: 'mode',
-    message: t('modePrompt'),
-    choices: [
-      { name: t('modeTui'), value: 'tui' },
-      { name: t('modeWeb'), value: 'web' },
-      { name: t('modeApp'), value: 'app' },
-    ],
-  }, options.mode)
-  if (answer.status !== 'value') return null
-  return answer.value === 'web' ? 'web' : answer.value === 'app' ? 'app' : 'tui'
-}
-
 /** Resolve the recommended-plugin selection for init; null on abort. */
 async function collectPlugins(context: WizardContext, t: T, options: DzcfOptions): Promise<readonly RecommendedPlugin[] | null> {
   if (options.plugins.length > 0) {
@@ -439,29 +395,163 @@ function installPlugins(context: WizardContext, t: T, profile: string, plugins: 
   return true
 }
 
+/** Fully-collected init state after the step loop resolves. */
+interface InitState {
+  key: string
+  baseUrl: string
+  surface: Surface
+  plugins: readonly RecommendedPlugin[]
+}
+
+/**
+ * Collect the init answers as a navigable step loop: Esc on any question
+ * steps back to the previous one (the prior answer becomes the default, so
+ * enter alone moves forward even with no input); Esc on the first question
+ * cancels the run. Non-interactive runs keep the fallback/fail-loud path.
+ */
+async function collectInitState(context: WizardContext, t: T, options: DzcfOptions): Promise<{ status: 'done'; state: InitState } | { status: 'cancelled' } | { status: 'abort' }> {
+  if (!context.interactive) {
+    if (options.key === undefined) {
+      context.err(t('missingKey'))
+      return { status: 'abort' }
+    }
+    const baseUrl = options.baseUrl ?? ''
+    if (baseUrl !== '' && !isHttpUrl(baseUrl)) {
+      context.err(t('badBaseUrl', { url: baseUrl }))
+      return { status: 'abort' }
+    }
+    if (options.mode === undefined) {
+      context.err(t('missingMode'))
+      return { status: 'abort' }
+    }
+    return {
+      status: 'done',
+      state: {
+        key: options.key,
+        baseUrl,
+        surface: options.mode,
+        plugins: options.plugins.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined),
+      },
+    }
+  }
+  context.out(t('backHint'))
+  let key = options.key
+  let baseUrl = options.baseUrl ?? ''
+  let surface = options.mode
+  let plugins = options.plugins.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined)
+  type InitStep = 'key' | 'baseUrl' | 'surface' | 'plugins' | 'proceed'
+  const steps: readonly InitStep[] = [
+    ...(key === undefined ? ['key' as const] : []),
+    'baseUrl' as const,
+    ...(surface === undefined ? ['surface' as const] : []),
+    ...(options.plugins.length === 0 ? ['plugins' as const] : []),
+    ...(options.yes ? ([] as const) : ['proceed' as const]),
+  ]
+  let index = 0
+  while (index < steps.length) {
+    const step = steps[index]
+    if (step === undefined) break
+    index += 1
+    let steppedBack = false
+    switch (step) {
+      case 'key': {
+        const outcome = await askOne(context.prompt, { type: 'password', name: 'key', message: t('apiKeyPrompt') })
+        if (outcome.status === 'cancelled') { steppedBack = true; break }
+        const typed = typeof outcome.value.key === 'string' ? outcome.value.key.trim() : ''
+        if (typed === '' && key === undefined) {
+          context.err(t('missingKey'))
+          return { status: 'abort' }
+        }
+        if (typed !== '') key = typed
+        break
+      }
+      case 'baseUrl': {
+        const outcome = await askOne(context.prompt, {
+          type: 'input',
+          name: 'baseUrl',
+          message: t('baseUrlPrompt', { default: PUBLIC_BASE_URL }),
+          ...(baseUrl === '' ? {} : { default: baseUrl }),
+        })
+        if (outcome.status === 'cancelled') { steppedBack = true; break }
+        const typed = typeof outcome.value.baseUrl === 'string' ? outcome.value.baseUrl.trim() : ''
+        if (typed !== '' && !isHttpUrl(typed)) {
+          context.err(t('badBaseUrl', { url: typed }))
+          return { status: 'abort' }
+        }
+        baseUrl = typed
+        break
+      }
+      case 'surface': {
+        const outcome = await askOne(context.prompt, {
+          type: 'list',
+          name: 'mode',
+          message: t('modePrompt'),
+          choices: [
+            { name: t('modeTui'), value: 'tui' },
+            { name: t('modeWeb'), value: 'web' },
+            { name: t('modeApp'), value: 'app' },
+          ],
+          ...(surface === undefined ? {} : { initial: surface }),
+        })
+        if (outcome.status === 'cancelled') { steppedBack = true; break }
+        const picked = outcome.value.mode
+        surface = picked === 'web' ? 'web' : picked === 'app' ? 'app' : 'tui'
+        break
+      }
+      case 'plugins': {
+        const outcome = await askOne(context.prompt, {
+          type: 'multiselect',
+          name: 'plugins',
+          message: t('pluginPrompt'),
+          choices: RECOMMENDED_PLUGINS.map(plugin => ({
+            name: `[${CATEGORY_LABELS[plugin.category][context.lang]}] ${plugin.label[context.lang]} — ${plugin.hint[context.lang]}`,
+            value: plugin.id,
+          })),
+          ...(plugins.length === 0 ? {} : { initial: plugins.map(plugin => plugin.id) }),
+        })
+        if (outcome.status === 'cancelled') { steppedBack = true; break }
+        const ids = (outcome.value.plugins as readonly string[] | undefined) ?? []
+        plugins = ids.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined)
+        break
+      }
+      case 'proceed': {
+        const profile = options.profile ?? 'dzcf'
+        context.out(t('summary', { lines: initPlanLines(key, baseUrl, surface ?? 'tui', profile, plugins).map(line => `  - ${line}`).join('\n') }))
+        const outcome = await askOne(context.prompt, { type: 'confirm', name: 'proceed', message: t('proceedConfirm'), default: true })
+        if (outcome.status === 'cancelled') { steppedBack = true; break }
+        if (outcome.value.proceed !== true) {
+          context.out(t('cancelled'))
+          return { status: 'cancelled' }
+        }
+        break
+      }
+    }
+    if (steppedBack) {
+      if (step === steps[0]) {
+        context.out(t('cancelled'))
+        return { status: 'cancelled' }
+      }
+      index = steps.indexOf(step) - 1
+    }
+  }
+  if (key === undefined || surface === undefined) {
+    context.err(key === undefined ? t('missingKey') : t('missingMode'))
+    return { status: 'abort' }
+  }
+  return { status: 'done', state: { key, baseUrl, surface, plugins } }
+}
+
 /** The full-init flow. */
 async function runInit(context: WizardContext, t: T, options: DzcfOptions): Promise<number> {
   const { home, out } = context
   if (!await ensureDsh(context, t, options)) return 1
 
-  const key = await collectKey(context, t, options)
-  if (key === null) return 1
-  const baseUrl = await collectBaseUrl(context, t, options)
-  if (baseUrl === null) return 1
-  const surface = await collectSurface(context, t, options)
-  if (surface === null) return 1
-  const plugins = await collectPlugins(context, t, options)
-  if (plugins === null) return 1
+  const collected = await collectInitState(context, t, options)
+  if (collected.status === 'abort') return 1
+  if (collected.status === 'cancelled') return 0
+  const { key, baseUrl, surface, plugins } = collected.state
   const profile = options.profile ?? 'dzcf'
 
-  if (context.interactive && !options.yes) {
-    out(t('summary', { lines: initPlanLines(key, baseUrl, surface, profile, plugins).map(line => `  - ${line}`).join('\n') }))
-    const outcome = await askOne(context.prompt, { type: 'confirm', name: 'proceed', message: t('proceedConfirm'), default: true })
-    if (outcome.status === 'cancelled' || outcome.value.proceed !== true) {
-      out(t('cancelled'))
-      return 0
-    }
-  }
   if (options.dryRun) {
     out(t('dryRunNotice'))
     for (const line of initPlanLines(key, baseUrl, surface, profile, plugins)) out(`  - ${line}`)
@@ -613,27 +703,88 @@ async function runConfigure(context: WizardContext, t: T, options: DzcfOptions):
   return 0
 }
 
-/** The credentials-only flow. */
+/** The credentials-only flow, as a navigable key -> base URL -> confirm loop. */
 async function runCredentials(context: WizardContext, t: T, options: DzcfOptions): Promise<number> {
-  const { home, out } = context
-  const key = await collectKey(context, t, options)
-  if (key === null) return 1
-  const baseUrl = await collectBaseUrl(context, t, options)
-  if (baseUrl === null) return 1
-  if (context.interactive && !options.yes) {
-    out(t('summary', { lines: `  - ${API_KEY_REF} = ${maskKey(key)}` }))
-    const outcome = await askOne(context.prompt, { type: 'confirm', name: 'proceed', message: t('proceedConfirm'), default: true })
-    if (outcome.status === 'cancelled' || outcome.value.proceed !== true) {
-      out(t('cancelled'))
-      return 0
+  const { home, out, err } = context
+  let key = options.key
+  let baseUrl = options.baseUrl ?? ''
+  if (context.interactive) {
+    context.out(t('backHint'))
+    type CredentialStep = 'key' | 'baseUrl' | 'proceed'
+    const steps: readonly CredentialStep[] = [
+      ...(key === undefined ? ['key' as const] : []),
+      ...(options.baseUrl === undefined ? (['baseUrl'] as const) : ([] as const)),
+      ...(options.yes ? ([] as const) : (['proceed'] as const)),
+    ]
+    let index = 0
+    while (index < steps.length) {
+      const step = steps[index]
+      if (step === undefined) break
+      index += 1
+      let steppedBack = false
+      switch (step) {
+        case 'key': {
+          const outcome = await askOne(context.prompt, { type: 'password', name: 'key', message: t('apiKeyPrompt') })
+          if (outcome.status === 'cancelled') { steppedBack = true; break }
+          const typed = typeof outcome.value.key === 'string' ? outcome.value.key.trim() : ''
+          if (typed === '' && key === undefined) {
+            err(t('missingKey'))
+            return 1
+          }
+          if (typed !== '') key = typed
+          break
+        }
+        case 'baseUrl': {
+          const outcome = await askOne(context.prompt, {
+            type: 'input',
+            name: 'baseUrl',
+            message: t('baseUrlPrompt', { default: PUBLIC_BASE_URL }),
+            ...(baseUrl === '' ? {} : { default: baseUrl }),
+          })
+          if (outcome.status === 'cancelled') { steppedBack = true; break }
+          const typed = typeof outcome.value.baseUrl === 'string' ? outcome.value.baseUrl.trim() : ''
+          if (typed !== '' && !isHttpUrl(typed)) {
+            err(t('badBaseUrl', { url: typed }))
+            return 1
+          }
+          baseUrl = typed
+          break
+        }
+        case 'proceed': {
+          out(t('summary', { lines: `  - ${API_KEY_REF} = ${maskKey(key ?? '')}` }))
+          const outcome = await askOne(context.prompt, { type: 'confirm', name: 'proceed', message: t('proceedConfirm'), default: true })
+          if (outcome.status === 'cancelled') { steppedBack = true; break }
+          if (outcome.value.proceed !== true) {
+            out(t('cancelled'))
+            return 0
+          }
+          break
+        }
+      }
+      if (steppedBack) {
+        if (step === steps[0]) {
+          out(t('cancelled'))
+          return 0
+        }
+        index = steps.indexOf(step) - 1
+      }
+    }
+  } else {
+    if (key === undefined) {
+      err(t('missingKey'))
+      return 1
+    }
+    if (baseUrl !== '' && !isHttpUrl(baseUrl)) {
+      err(t('badBaseUrl', { url: baseUrl }))
+      return 1
     }
   }
   if (options.dryRun) {
     out(t('dryRunNotice'))
-    out(`  - ${API_KEY_REF} = ${maskKey(key)}`)
+    out(`  - ${API_KEY_REF} = ${maskKey(key ?? '')}`)
     return 0
   }
-  return await storeCredentials(context, t, home, key, baseUrl) ? 0 : 1
+  return await storeCredentials(context, t, home, key ?? '', baseUrl) ? 0 : 1
 }
 
 /** Render the banner and resolve the flow. */
