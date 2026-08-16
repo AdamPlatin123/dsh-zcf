@@ -570,7 +570,7 @@ describe('runWizard — marketplace and manage', () => {
       ...OPTIONS, key: 'sk-test-1234', mode: 'tui', plugins: ['dsh-security-scan'],
     })
     expect(code).toBe(0)
-    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', '@deepseek-harness-tui/dsh-tui@^0.7.2'] })
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', '@deepseek-harness-tui/dsh-tui'] })
     expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-security-scan'] })
     expect(lines.join('\n')).toContain('dsh --profile dzcf')
   })

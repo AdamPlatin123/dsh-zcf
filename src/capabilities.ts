@@ -41,14 +41,15 @@ export interface Capability {
 }
 
 /**
- * The runtime surfaces the wizard offers, pinned to release ranges: the
- * official bundles' npm `latest` tags currently point at broken 0.0.1-rc.1
- * builds (missing private dependencies), so each surface pins a caret range
- * on the working line instead. The app surface is the community Tauri 2
- * desktop shell (macOS/Windows; Linux users should pick tui or web).
+ * The runtime surfaces the wizard offers. The official web bundle's npm
+ * `latest` tag currently points at a broken 0.0.1-rc.1 build (missing
+ * private dependencies), so it pins a caret range on the working line; the
+ * tui and app community bundles keep healthy `latest` tags and are left
+ * unpinned to track newest releases. The app surface is the Tauri 2 desktop
+ * shell (macOS/Windows; Linux users should pick tui or web).
  */
 export const SURFACE_BUNDLES = {
-  tui: '@deepseek-harness-tui/dsh-tui@^0.7.2',
+  tui: '@deepseek-harness-tui/dsh-tui',
   web: '@deepseek-ai/dsh-web-app@^0.1.0-rc.6',
   app: 'dsh-desktop-app@^0.4.0',
 } as const
