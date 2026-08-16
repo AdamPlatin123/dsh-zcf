@@ -304,12 +304,12 @@ export const MESSAGES: MessageTable = {
     'en': 'Removing {plugin} failed: {stderr}',
   },
   nextStepsTui: {
-    'zh-CN': '下一步：dsh --profile {profile}（终端 UI）',
-    'en': 'Next: dsh --profile {profile} (terminal UI)',
+    'zh-CN': 'dsh --profile {profile}（终端 UI）',
+    'en': 'dsh --profile {profile} (terminal UI)',
   },
   nextStepsApp: {
-    'zh-CN': '下一步：dsh --profile {profile}（按 dsh-desktop-app 的说明启动桌面壳）',
-    'en': 'Next: dsh --profile {profile} (launch the desktop shell per dsh-desktop-app instructions)',
+    'zh-CN': 'dsh --profile {profile}（按 dsh-desktop-app 的说明启动桌面壳）',
+    'en': 'dsh --profile {profile} (launch the desktop shell per dsh-desktop-app instructions)',
   },
 } as const
 
