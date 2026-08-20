@@ -199,13 +199,17 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '3. 管理已装插件 — 列出 profile 的插件并选择移除',
     'en': '3. Manage installed plugins — list a profile\'s plugins and pick ones to remove',
   },
+  menuUpdate: {
+    'zh-CN': '4. 更新已装插件 — 升级到 npm 最新版',
+    'en': '4. Update installed plugins — refresh entries to npm latest',
+  },
   menuConfigure: {
-    'zh-CN': '4. 高级集成 — 官方接缝选项（搜索提供商、SQLite、MCP 等）',
-    'en': '4. Advanced integrations — official seam options (search providers, SQLite, MCP, …)',
+    'zh-CN': '5. 高级集成 — 官方接缝选项（搜索提供商、SQLite、MCP 等）',
+    'en': '5. Advanced integrations — official seam options (search providers, SQLite, MCP, …)',
   },
   menuCredentials: {
-    'zh-CN': '5. 更新凭据 — 仅更新 Key / Base URL',
-    'en': '5. Update credentials — refresh only the key / base URL',
+    'zh-CN': '6. 更新凭据 — 仅更新 Key / Base URL',
+    'en': '6. Update credentials — refresh only the key / base URL',
   },
   profileNamePrompt: {
     'zh-CN': '给这个定制形态起个名字（之后用 `dsh --profile <名字>` 启动，默认 dzcf）：',
@@ -294,6 +298,22 @@ export const MESSAGES: MessageTable = {
   manageRemovePrompt: {
     'zh-CN': '选择要移除的插件（空格选择，回车确认；不选则保留全部）：',
     'en': 'Pick plugins to remove (space to pick, enter to confirm; none keeps everything):',
+  },
+  updatePrompt: {
+    'zh-CN': '选择要更新的插件（空格选择，回车确认；不选则保持现状）：',
+    'en': 'Pick plugins to update (space to pick, enter to confirm; none keeps everything as-is):',
+  },
+  pluginUpdating: {
+    'zh-CN': '正在更新插件 {plugin}……',
+    'en': 'Updating plugin {plugin}…',
+  },
+  pluginUpdated: {
+    'zh-CN': '插件 {plugin} 已更新到最新版。',
+    'en': 'Plugin {plugin} updated to the latest version.',
+  },
+  pluginUpdateFailed: {
+    'zh-CN': '插件 {plugin} 更新失败：{stderr}',
+    'en': 'Plugin {plugin} update failed: {stderr}',
   },
   pluginRemoving: {
     'zh-CN': '正在移除插件 {plugin}……',
