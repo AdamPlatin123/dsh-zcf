@@ -1,5 +1,5 @@
 /**
- * Recommended-plugin catalog for the dsh-zcf wizard: twenty-six entries from
+ * Recommended-plugin catalog for the dsh-zcf wizard: thirty-two entries from
  * the community radar (awesome-dsh-plugins), each passing both gates — the
  * radar's runtime-verified verdict and an npm package that actually exists —
  * spread across directions, all installable as plain npm packages — `dsh plugin add -w`
@@ -67,6 +67,12 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     hint: { 'zh-CN': '交付前需求审讯、红绿测试证据门与对抗评审', 'en': 'Pre-delivery requirement grilling, red-green test evidence gate, adversarial review' },
   },
   {
+    id: 'superpowers-dsh',
+    category: 'coding',
+    label: { 'zh-CN': 'superpowers-dsh 开发技能集', 'en': 'superpowers-dsh dev skills' },
+    hint: { 'zh-CN': 'TDD、调试、计划等开发工作流技能集', 'en': 'Development workflow skills: TDD, debugging, planning' },
+  },
+  {
     id: 'dsh-mcp-adapter',
     category: 'agent',
     label: { 'zh-CN': 'dsh-mcp-adapter MCP 代理', 'en': 'dsh-mcp-adapter MCP proxy' },
@@ -89,6 +95,12 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     category: 'agent',
     label: { 'zh-CN': 'dsh-vision-proxy 自动识图', 'en': 'dsh-vision-proxy auto vision' },
     hint: { 'zh-CN': '无视觉主模型经视觉模型转译图片，无 key 自动探测本地 Ollama', 'en': 'Transcribes images via a VLM for visionless models; auto-detects local Ollama without a key' },
+  },
+  {
+    id: 'dsh-vision-router',
+    category: 'agent',
+    label: { 'zh-CN': 'dsh-vision-router 视觉路由', 'en': 'dsh-vision-router vision router' },
+    hint: { 'zh-CN': '内置免费视觉模型路由，给文本 agent 加上视觉', 'en': 'Built-in free vision-model routing that gives text agents eyes' },
   },
   {
     id: 'dsh-office',
@@ -125,6 +137,18 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     category: 'web-ui',
     label: { 'zh-CN': 'dsh-session-pins 会话置顶', 'en': 'dsh-session-pins session pins' },
     hint: { 'zh-CN': '侧边栏持久置顶常用会话，快速打开', 'en': 'Pin frequently-used sessions in the sidebar for quick access' },
+  },
+  {
+    id: 'dsh-message-edit',
+    category: 'web-ui',
+    label: { 'zh-CN': 'dsh-message-edit 消息编辑', 'en': 'dsh-message-edit message edit' },
+    hint: { 'zh-CN': '分支式消息编辑、reroll、重试与多版本', 'en': 'Branching message edit, reroll, retry, and multi-version' },
+  },
+  {
+    id: 'dsh-visualize',
+    category: 'web-ui',
+    label: { 'zh-CN': 'dsh-visualize 可视化卡片', 'en': 'dsh-visualize visual cards' },
+    hint: { 'zh-CN': '对话中生成交互式可视化卡片', 'en': 'Interactive visualization cards generated in conversation' },
   },
   {
     id: 'dsh-mnemon',
@@ -179,6 +203,18 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     category: 'infra',
     label: { 'zh-CN': 'dsh-full-remote 远程访问', 'en': 'dsh-full-remote remote access' },
     hint: { 'zh-CN': '令牌反向代理远程恢复设置/凭据/目录，扫码邀请、按设备会话', 'en': 'Token reverse proxy restoring settings/credentials/directory remotely; QR invite, per-device sessions' },
+  },
+  {
+    id: 'dsh-plugin-check',
+    category: 'infra',
+    label: { 'zh-CN': 'dsh-plugin-check 插件体检', 'en': 'dsh-plugin-check plugin health' },
+    hint: { 'zh-CN': '插件健康检查：清单协议、patch 格式、构建陷阱', 'en': 'Plugin health checks: manifest protocol, patch format, build pitfalls' },
+  },
+  {
+    id: 'dsh-web-plugin-manager',
+    category: 'infra',
+    label: { 'zh-CN': 'dsh-web-plugin-manager 插件管理面板', 'en': 'dsh-web-plugin-manager plugin panel' },
+    hint: { 'zh-CN': 'Web UI 一键管理插件：启停、装卸、环境管理', 'en': 'One-click plugin management in the web UI: toggle, install/remove, environments' },
   },
   {
     id: 'dsh-web-access',

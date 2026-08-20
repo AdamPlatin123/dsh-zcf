@@ -54,7 +54,7 @@ dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
 | 参数 | 含义 |
 |---|---|
 | `i` | 完整初始化（与裸命令等价）。 |
-| `n` | 推荐插件市场：多选安装 26 个精选插件（默认 dzcf profile）。 |
+| `n` | 推荐插件市场：多选安装 32 个精选插件（默认 dzcf profile）。 |
 | `l` | 管理已装插件：列出并按选择移除（默认 dzcf profile）。 |
 | `c` | 高级集成；需要 `--profile` 与 `--with`。 |
 | `k` | 仅更新凭据（Key / Base URL）。 |
@@ -71,7 +71,7 @@ dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
 | `--dry-run` | 打印计划中的写入与验证命令，不落盘。 |
 | `-V, --version` | 打印版本后退出。 |
 
-## 推荐插件（26 个精选）
+## 推荐插件（32 个精选）
 
 `n` 市场与 init 流程的多选清单，全部取自社区雷达 [awesome-dsh-plugins](https://github.com/AdamPlatin123/awesome-dsh-plugins) 的运行级验证通过条目；更多插件见 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)。
 
