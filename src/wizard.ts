@@ -667,6 +667,64 @@ async function runManage(context: WizardContext, t: T, options: DzcfOptions): Pr
   return 0
 }
 
+/**
+ * The update flow: refresh picked installed plugins to npm latest. `plugin
+ * add` over an installed package is the package manager's upgrade, so the
+ * update path reuses it verbatim.
+ */
+async function runUpdate(context: WizardContext, t: T, options: DzcfOptions): Promise<number> {
+  const { run, out, err, home } = context
+  const profile = options.profile ?? 'dzcf'
+  const installed = listProfileBundles(home, profile)
+  if (installed === undefined) {
+    err(t('manageMissing', { profile }))
+    return 1
+  }
+  if (installed.length === 0) {
+    out(t('manageEmpty'))
+    return 0
+  }
+  out(t('manageListHeader'))
+  for (const pkg of installed) out(`  - ${pkg}`)
+
+  let toUpdate: readonly string[]
+  if (context.interactive) {
+    const outcome = await askOne(context.prompt, {
+      type: 'multiselect',
+      name: 'update',
+      message: t('updatePrompt'),
+      choices: installed.map(pkg => ({ name: pkg, value: pkg })),
+    })
+    if (outcome.status === 'cancelled') {
+      out(t('cancelled'))
+      return 0
+    }
+    toUpdate = (outcome.value.update as readonly string[] | undefined) ?? []
+  } else {
+    // No explicit --plugin list in a non-interactive run updates everything.
+    toUpdate = options.plugins.length > 0 ? options.plugins.filter(pkg => installed.includes(pkg)) : installed
+  }
+  if (toUpdate.length === 0) {
+    out(t('marketplaceNone'))
+    return 0
+  }
+  if (options.dryRun) {
+    out(t('dryRunNotice'))
+    for (const pkg of toUpdate) out(`  - update ${pkg} -> latest`)
+    return 0
+  }
+  for (const pkg of toUpdate) {
+    out(t('pluginUpdating', { plugin: pkg }))
+    const result = installPlugin(run, profile, pkg)
+    if (result.status !== 0) {
+      err(t('pluginUpdateFailed', { plugin: pkg, stderr: result.stderr.trim() }))
+      return 1
+    }
+    out(t('pluginUpdated', { plugin: pkg }))
+  }
+  return 0
+}
+
 /** The integrations-only flow. */
 async function runConfigure(context: WizardContext, t: T, options: DzcfOptions): Promise<number> {
   const { home, out, err } = context
@@ -793,6 +851,7 @@ async function pickAction(context: WizardContext, t: T, options: DzcfOptions): P
     { action: 'init', label: t('menuInit') },
     { action: 'marketplace', label: t('menuMarketplace') },
     { action: 'manage', label: t('menuManage') },
+    { action: 'update', label: t('menuUpdate') },
     { action: 'configure', label: t('menuConfigure') },
     { action: 'credentials', label: t('menuCredentials') },
     { action: 'exit', label: t('menuExit') },
@@ -812,7 +871,7 @@ async function pickAction(context: WizardContext, t: T, options: DzcfOptions): P
   })
   if (outcome.status === 'cancelled') return 'exit'
   const value = outcome.value.action
-  return value === 'init' || value === 'marketplace' || value === 'manage' || value === 'configure' || value === 'credentials' ? value : 'exit'
+  return value === 'init' || value === 'marketplace' || value === 'manage' || value === 'update' || value === 'configure' || value === 'credentials' ? value : 'exit'
 }
 
 /**
@@ -828,6 +887,7 @@ export async function runWizard(context: WizardContext, options: DzcfOptions): P
     case 'init': return runInit(context, t, options)
     case 'marketplace': return runMarketplace(context, t, options)
     case 'manage': return runManage(context, t, options)
+    case 'update': return runUpdate(context, t, options)
     case 'configure': return runConfigure(context, t, options)
     case 'credentials': return runCredentials(context, t, options)
     case 'exit': return 0

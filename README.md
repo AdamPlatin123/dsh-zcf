@@ -55,6 +55,7 @@ Nothing else is touched: no profile files are rewritten, no `cordis.yml` is gene
 | `i` | Full init (same as the bare command). |
 | `n` | Recommended-plugin market: multi-select from the 32 curated picks (default dzcf profile). |
 | `l` | Manage installed plugins: list and remove picked ones (default dzcf profile). |
+| `u` | Update installed plugins: multi-select refreshes picked entries to npm latest; non-interactive with no `--plugin` updates all. |
 | `c` | Advanced integrations; requires `--profile` and `--with`. |
 | `k` | Update credentials only (key / base URL). |
 | `-k, --key <key>` | API key; skip the masked prompt. |

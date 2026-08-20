@@ -605,6 +605,50 @@ describe('runWizard — marketplace and manage', () => {
     expect(lines.join('\n')).toContain('profile 不存在')
   })
 
+  it('updates only the picked plugins in a non-interactive update', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-lens', 'dsh-spend'] } } }))
+    const { run, calls } = scriptedRun()
+    const code = await runWizard(await context({ home, run }), {
+      ...OPTIONS, action: 'update', plugins: ['dsh-lens'],
+    })
+    expect(code).toBe(0)
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-lens'] })
+    expect(calls).not.toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-spend'] })
+  })
+
+  it('updates every registered plugin when non-interactive and no --plugin is given', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-lens', 'dsh-spend'] } } }))
+    const { run, calls } = scriptedRun()
+    const code = await runWizard(await context({ home, run }), { ...OPTIONS, action: 'update' })
+    expect(code).toBe(0)
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-lens'] })
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-spend'] })
+  })
+
+  it('reports the update plan without executing under --dry-run', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-lens'] } } }))
+    const { run, calls } = scriptedRun()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), { ...OPTIONS, action: 'update', dryRun: true })
+    expect(code).toBe(0)
+    expect(calls).toHaveLength(0)
+    expect(lines.join('\n')).toContain('update dsh-lens -> latest')
+  })
+
+  it('fails loud when the update target profile is missing', async () => {
+    const home = await tempHome()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, ...outputLines(lines) }), { ...OPTIONS, action: 'update' })
+    expect(code).toBe(1)
+    expect(lines.join('\n')).toContain('profile 不存在')
+  })
+
   it('init installs picked plugins after creating a tui-surface profile', async () => {
     const home = await tempHome()
     const { run, calls } = scriptedRun()

@@ -59,7 +59,7 @@ export function renderBanner(): string {
 }
 
 /** Main-menu actions the interactive session offers. */
-export type MenuAction = 'init' | 'marketplace' | 'manage' | 'configure' | 'credentials' | 'exit'
+export type MenuAction = 'init' | 'marketplace' | 'manage' | 'update' | 'configure' | 'credentials' | 'exit'
 
 /** Render the menu labels as a plain numbered list (non-interactive reference). */
 export function renderMenuLines(title: string, options: readonly { action: MenuAction; label: string }[]): string {

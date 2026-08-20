@@ -13,7 +13,7 @@ import { parsePluginList } from './marketplace.ts'
 import type { Lang } from './i18n.ts'
 
 /** The flow the invocation selects. */
-export type DzcfAction = 'menu' | 'init' | 'marketplace' | 'manage' | 'configure' | 'credentials'
+export type DzcfAction = 'menu' | 'init' | 'marketplace' | 'manage' | 'update' | 'configure' | 'credentials'
 
 /** The resolved dsh-zcf invocation. */
 export interface DzcfOptions {
@@ -60,7 +60,7 @@ export function isHttpUrl(value: string): boolean {
 
 const LANGS: readonly Lang[] = ['zh-CN', 'en']
 const MODES: readonly string[] = ['tui', 'web', 'app']
-const ACTIONS: readonly string[] = ['i', 'n', 'l', 'c', 'k', 'init', 'marketplace', 'manage', 'configure', 'credentials']
+const ACTIONS: readonly string[] = ['i', 'n', 'l', 'u', 'c', 'k', 'init', 'marketplace', 'manage', 'update', 'configure', 'credentials']
 
 const ACTION_TO_FLOW: Readonly<Record<string, Exclude<DzcfAction, 'menu'>>> = {
   'i': 'init',
@@ -69,6 +69,8 @@ const ACTION_TO_FLOW: Readonly<Record<string, Exclude<DzcfAction, 'menu'>>> = {
   'marketplace': 'marketplace',
   'l': 'manage',
   'manage': 'manage',
+  'u': 'update',
+  'update': 'update',
   'c': 'configure',
   'configure': 'configure',
   'k': 'credentials',
@@ -94,7 +96,7 @@ export function parseDzcfArgs(argv: readonly string[], version: string): DzcfOpt
     .name('dsh-zcf')
     .description('zero-config DeepSeek Harness setup')
     .version(version, '-V, --version')
-    .argument('[action]', 'flow: i (init), n (marketplace), l (manage), c (configure integrations), k (credentials)')
+    .argument('[action]', 'flow: i (init), n (marketplace), l (manage), u (update plugins), c (configure integrations), k (credentials)')
     .allowExcessArguments(false)
     .option('-k, --key <key>', 'DeepSeek API key (non-interactive)')
     .option('--base-url <url>', 'API base URL override (non-interactive)')
