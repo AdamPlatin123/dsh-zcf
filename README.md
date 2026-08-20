@@ -53,7 +53,7 @@ Nothing else is touched: no profile files are rewritten, no `cordis.yml` is gene
 | Option | Meaning |
 |---|---|
 | `i` | Full init (same as the bare command). |
-| `n` | Recommended-plugin market: multi-select from the 20 curated picks (default dzcf profile). |
+| `n` | Recommended-plugin market: multi-select from the 26 curated picks (default dzcf profile). |
 | `l` | Manage installed plugins: list and remove picked ones (default dzcf profile). |
 | `c` | Advanced integrations; requires `--profile` and `--with`. |
 | `k` | Update credentials only (key / base URL). |
@@ -70,7 +70,7 @@ Nothing else is touched: no profile files are rewritten, no `cordis.yml` is gene
 | `--dry-run` | Print the planned writes and verify command, touch nothing. |
 | `-V, --version` | Print the version and exit. |
 
-## Recommended plugins (20 curated picks)
+## Recommended plugins (26 curated picks)
 
 The `n` market and the init multiselect, all runtime-verified entries from the community radar [awesome-dsh-plugins](https://github.com/AdamPlatin123/awesome-dsh-plugins); more at [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin).
 

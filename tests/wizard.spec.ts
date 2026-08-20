@@ -610,11 +610,11 @@ describe('runWizard — marketplace and manage', () => {
     const { run, calls } = scriptedRun()
     const lines: string[] = []
     const code = await runWizard(await context({ home, run, ...outputLines(lines) }), {
-      ...OPTIONS, key: 'sk-test-1234', mode: 'tui', plugins: ['dsh-security-scan'],
+      ...OPTIONS, key: 'sk-test-1234', mode: 'tui', plugins: ['dsh-doublecheck'],
     })
     expect(code).toBe(0)
     expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', '@deepseek-harness-tui/dsh-tui'] })
-    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-security-scan'] })
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-doublecheck'] })
     expect(lines.join('\n')).toContain('dsh --profile dzcf')
   })
 })

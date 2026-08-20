@@ -1,7 +1,8 @@
 /**
- * Recommended-plugin catalog for the dsh-zcf wizard: twenty runtime-verified
- * entries from the community radar (awesome-dsh-plugins), spread across
- * directions, all installable as plain npm packages — `dsh plugin add -w`
+ * Recommended-plugin catalog for the dsh-zcf wizard: twenty-six entries from
+ * the community radar (awesome-dsh-plugins), each passing both gates — the
+ * radar's runtime-verified verdict and an npm package that actually exists —
+ * spread across directions, all installable as plain npm packages — `dsh plugin add -w`
  * registers the bundle and the loader expands it, so an entry needs no patch
  * rows. Entries whose upstream npm `latest` is healthy are left unpinned; the
  * catalog is data, the engine only iterates it.
@@ -25,7 +26,7 @@ export interface RecommendedPlugin {
 }
 
 /** The catalog's directions, in display order. */
-export type RecommendedCategory = 'coding' | 'agent' | 'web-ui' | 'memory' | 'messaging' | 'files' | 'infra' | 'web'
+export type RecommendedCategory = 'coding' | 'agent' | 'web-ui' | 'memory' | 'messaging' | 'files' | 'infra' | 'web' | 'migration'
 
 /** Direction labels per language, keyed by {@link RecommendedCategory}. */
 export const CATEGORY_LABELS: Readonly<Record<RecommendedCategory, Record<Lang, string>>> = {
@@ -37,6 +38,7 @@ export const CATEGORY_LABELS: Readonly<Record<RecommendedCategory, Record<Lang, 
   'files': { 'zh-CN': '文件与安全', 'en': 'Files & safety' },
   'infra': { 'zh-CN': '基建守护', 'en': 'Infra guard' },
   'web': { 'zh-CN': '联网', 'en': 'Web access' },
+  'migration': { 'zh-CN': '数据迁移', 'en': 'Migration' },
 }
 
 export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
@@ -59,10 +61,10 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     hint: { 'zh-CN': '以 diff 视图审查 agent 的文件修改', 'en': 'Review agent file modifications in a diff view' },
   },
   {
-    id: 'dsh-subagent-tools',
-    category: 'agent',
-    label: { 'zh-CN': 'dsh-subagent-tools 子代理增强', 'en': 'dsh-subagent-tools subagent controls' },
-    hint: { 'zh-CN': '按调用覆写子代理的模型/提供商/人设与工具过滤', 'en': 'Per-call overrides for subagent model/provider/persona and tool filter' },
+    id: 'dsh-doublecheck',
+    category: 'coding',
+    label: { 'zh-CN': 'dsh-doublecheck 交付三查', 'en': 'dsh-doublecheck delivery checks' },
+    hint: { 'zh-CN': '交付前需求审讯、红绿测试证据门与对抗评审', 'en': 'Pre-delivery requirement grilling, red-green test evidence gate, adversarial review' },
   },
   {
     id: 'dsh-mcp-adapter',
@@ -75,6 +77,18 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     category: 'agent',
     label: { 'zh-CN': 'billion-context 上下文压缩', 'en': 'billion-context compression' },
     hint: { 'zh-CN': '模型驱动的上下文压缩与检索（compress/decompress/search 工具）', 'en': 'Model-driven context compression with compress/decompress/search tools' },
+  },
+  {
+    id: 'dsh-sentinel',
+    category: 'agent',
+    label: { 'zh-CN': 'dsh-sentinel 事件唤醒', 'en': 'dsh-sentinel event wakeup' },
+    hint: { 'zh-CN': '文件/命令/HTTP/进程/webhook 传感器事件驱动唤醒 agent loop', 'en': 'Event-driven agent-loop wakeup via file/command/HTTP/process/webhook sensors' },
+  },
+  {
+    id: 'dsh-vision-proxy',
+    category: 'agent',
+    label: { 'zh-CN': 'dsh-vision-proxy 自动识图', 'en': 'dsh-vision-proxy auto vision' },
+    hint: { 'zh-CN': '无视觉主模型经视觉模型转译图片，无 key 自动探测本地 Ollama', 'en': 'Transcribes images via a VLM for visionless models; auto-detects local Ollama without a key' },
   },
   {
     id: 'dsh-office',
@@ -101,10 +115,16 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     hint: { 'zh-CN': '从用户问题与 Markdown 标题实时生成大纲', 'en': 'Live outline tree from user questions and Markdown headings' },
   },
   {
-    id: 'dsh-genui',
+    id: 'dsh-ui-quote-selection',
     category: 'web-ui',
-    label: { 'zh-CN': 'dsh-genui 内联组件', 'en': 'dsh-genui inline components' },
-    hint: { 'zh-CN': '内联 GenUI：图表、表单、测验、3D 场景与动作回路', 'en': 'Inline GenUI: charts, forms, quizzes, 3D scenes with an action loop' },
+    label: { 'zh-CN': 'dsh-ui-quote-selection 划词引用', 'en': 'dsh-ui-quote-selection quote selection' },
+    hint: { 'zh-CN': '选中文字一键引用到输入框，发送自动附完整原文', 'en': 'One-click quote of selected text into the composer, full source attached on send' },
+  },
+  {
+    id: 'dsh-session-pins',
+    category: 'web-ui',
+    label: { 'zh-CN': 'dsh-session-pins 会话置顶', 'en': 'dsh-session-pins session pins' },
+    hint: { 'zh-CN': '侧边栏持久置顶常用会话，快速打开', 'en': 'Pin frequently-used sessions in the sidebar for quick access' },
   },
   {
     id: 'dsh-mnemon',
@@ -137,28 +157,46 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     hint: { 'zh-CN': '会话产物的组织与浏览', 'en': 'Organize and browse session artifacts' },
   },
   {
-    id: 'dsh-security-scan',
-    category: 'files',
-    label: { 'zh-CN': 'dsh-security-scan 密钥防护', 'en': 'dsh-security-scan secret scanner' },
-    hint: { 'zh-CN': '扫描密钥与危险模式并脱敏（key/token 打码）', 'en': 'Scans secrets and dangerous patterns, redacts keys/tokens' },
-  },
-  {
-    id: 'dsh-plugin-guard',
-    category: 'infra',
-    label: { 'zh-CN': 'dsh-plugin-guard 插件快照', 'en': 'dsh-plugin-guard snapshot net' },
-    hint: { 'zh-CN': '插件装卸前后快照/回滚安全网，损坏自动恢复', 'en': 'Snapshot/rollback safety net for plugin install/uninstall with auto-recovery' },
-  },
-  {
     id: 'dsh-plugin-audit',
     category: 'infra',
     label: { 'zh-CN': 'dsh-plugin-audit 权限哨兵', 'en': 'dsh-plugin-audit permission sentinel' },
     hint: { 'zh-CN': '插件静态权限画像 + 凭据访问/出网运行时哨兵', 'en': 'Static permission profiler plus runtime sentinel on credential access and egress' },
   },
   {
+    id: 'dsh-vps-hub',
+    category: 'infra',
+    label: { 'zh-CN': 'dsh-vps-hub SSH 台账', 'en': 'dsh-vps-hub SSH ledger' },
+    hint: { 'zh-CN': '本地 VPS 台账与 8 个 vps_* 工具：发现/测试/执行/传输，密钥仅路径引用', 'en': 'Local VPS ledger with 8 vps_* tools: discover/test/exec/transfer; keys referenced by path only' },
+  },
+  {
+    id: 'dsh-lan-access',
+    category: 'infra',
+    label: { 'zh-CN': 'dsh-lan-access 局域网访问', 'en': 'dsh-lan-access LAN access' },
+    hint: { 'zh-CN': 'Web GUI 绑 0.0.0.0 供局域网访问，修复非安全上下文 RPC', 'en': 'Binds the web GUI to 0.0.0.0 for LAN access and fixes RPC on insecure contexts' },
+  },
+  {
+    id: 'dsh-full-remote',
+    category: 'infra',
+    label: { 'zh-CN': 'dsh-full-remote 远程访问', 'en': 'dsh-full-remote remote access' },
+    hint: { 'zh-CN': '令牌反向代理远程恢复设置/凭据/目录，扫码邀请、按设备会话', 'en': 'Token reverse proxy restoring settings/credentials/directory remotely; QR invite, per-device sessions' },
+  },
+  {
     id: 'dsh-web-access',
     category: 'web',
     label: { 'zh-CN': 'dsh-web-access 联网访问', 'en': 'dsh-web-access web access' },
     hint: { 'zh-CN': '多提供商联网搜索/抓取/源校验，带 Web 面板', 'en': 'Multi-provider web search/fetch/source check with a web panel' },
+  },
+  {
+    id: 'dsh-claude-move',
+    category: 'migration',
+    label: { 'zh-CN': 'dsh-claude-move Claude 迁移', 'en': 'dsh-claude-move Claude migration' },
+    hint: { 'zh-CN': '从 Claude Code 全保真迁移历史会话/记忆/技能/CLAUDE.md，可增量同步', 'en': 'Full-fidelity migration of Claude Code sessions/memories/skills/CLAUDE.md with incremental sync' },
+  },
+  {
+    id: 'dsh-chat-import',
+    category: 'migration',
+    label: { 'zh-CN': 'dsh-chat-import 多源导入', 'en': 'dsh-chat-import multi-source import' },
+    hint: { 'zh-CN': '13 源（Claude Code/Codex/ChatGPT/Cursor 等）导入为可续聊会话，支持写回', 'en': 'Import 13 sources (Claude Code/Codex/ChatGPT/Cursor/...) as resumable sessions, with write-back' },
   },
 ]
 
