@@ -190,17 +190,35 @@ async function collectPlugins(context: WizardContext, t: T, options: DzcfOptions
     type: 'multiselect',
     name: 'plugins',
     message: t('pluginPrompt'),
-    choices: RECOMMENDED_PLUGINS.map(plugin => ({
-      name: `[${CATEGORY_LABELS[plugin.category][context.lang]}] ${plugin.label[context.lang]} — ${plugin.hint[context.lang]}`,
-      value: plugin.id,
-    })),
+    choices: [
+      { name: t('selectAll'), value: SELECT_ALL },
+      ...RECOMMENDED_PLUGINS.map(plugin => ({
+        name: `[${CATEGORY_LABELS[plugin.category][context.lang]}] ${plugin.label[context.lang]} — ${plugin.hint[context.lang]}`,
+        value: plugin.id,
+      })),
+    ],
   })
   if (outcome.status === 'cancelled') {
     context.out(t('cancelled'))
     return null
   }
-  const ids = (outcome.value.plugins as readonly string[] | undefined) ?? []
+  const picked = (outcome.value.plugins as readonly string[] | undefined) ?? []
+  const ids = expandSelectAll(picked, RECOMMENDED_PLUGINS.map(plugin => plugin.id))
   return ids.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined)
+}
+
+/** Sentinel multiselect choice standing for "every entry in this list". */
+const SELECT_ALL = '__ALL__'
+
+/**
+ * Expand a multiselect result: picking the sentinel equals picking every
+ * concrete value the question offered.
+ * @param picked - raw picked values, possibly containing the sentinel.
+ * @param all - every concrete value the question offered.
+ * @returns the effective picked values.
+ */
+function expandSelectAll(picked: readonly string[], all: readonly string[]): readonly string[] {
+  return picked.includes(SELECT_ALL) ? all : picked.filter(value => value !== SELECT_ALL)
 }
 
 /** Resolve the integration selection into a plan; null on abort. */
@@ -213,13 +231,17 @@ async function collectIntegrations(context: WizardContext, t: T, options: DzcfOp
       type: 'multiselect',
       name: 'with',
       message: t('integrationPrompt'),
-      choices: CAPABILITIES.map(capability => ({ name: `${capability.label[context.lang]} — ${capability.hint[context.lang]}`, value: capability.id })),
+      choices: [
+        { name: t('selectAll'), value: SELECT_ALL },
+        ...CAPABILITIES.map(capability => ({ name: `${capability.label[context.lang]} — ${capability.hint[context.lang]}`, value: capability.id })),
+      ],
     })
     if (outcome.status === 'cancelled') {
       context.out(t('cancelled'))
       return null
     }
-    ids = (outcome.value.with as readonly string[] | undefined) ?? []
+    const pickedWith = (outcome.value.with as readonly string[] | undefined) ?? []
+    ids = expandSelectAll(pickedWith, CAPABILITIES.map(capability => capability.id))
   } else {
     ids = []
   }
@@ -503,14 +525,18 @@ async function collectInitState(context: WizardContext, t: T, options: DzcfOptio
           type: 'multiselect',
           name: 'plugins',
           message: t('pluginPrompt'),
-          choices: RECOMMENDED_PLUGINS.map(plugin => ({
-            name: `[${CATEGORY_LABELS[plugin.category][context.lang]}] ${plugin.label[context.lang]} — ${plugin.hint[context.lang]}`,
-            value: plugin.id,
-          })),
+          choices: [
+            { name: t('selectAll'), value: SELECT_ALL },
+            ...RECOMMENDED_PLUGINS.map(plugin => ({
+              name: `[${CATEGORY_LABELS[plugin.category][context.lang]}] ${plugin.label[context.lang]} — ${plugin.hint[context.lang]}`,
+              value: plugin.id,
+            })),
+          ],
           ...(plugins.length === 0 ? {} : { initial: plugins.map(plugin => plugin.id) }),
         })
         if (outcome.status === 'cancelled') { steppedBack = true; break }
-        const ids = (outcome.value.plugins as readonly string[] | undefined) ?? []
+        const pickedPlugins = (outcome.value.plugins as readonly string[] | undefined) ?? []
+        const ids = expandSelectAll(pickedPlugins, RECOMMENDED_PLUGINS.map(plugin => plugin.id))
         plugins = ids.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined)
         break
       }
@@ -636,13 +662,13 @@ async function runManage(context: WizardContext, t: T, options: DzcfOptions): Pr
       type: 'multiselect',
       name: 'remove',
       message: t('manageRemovePrompt'),
-      choices: installed.map(pkg => ({ name: pkg, value: pkg })),
+      choices: [{ name: t('selectAll'), value: SELECT_ALL }, ...installed.map(pkg => ({ name: pkg, value: pkg }))],
     })
     if (outcome.status === 'cancelled') {
       out(t('cancelled'))
       return 0
     }
-    toRemove = (outcome.value.remove as readonly string[] | undefined) ?? []
+    toRemove = expandSelectAll((outcome.value.remove as readonly string[] | undefined) ?? [], installed)
   } else {
     toRemove = options.plugins.filter(pkg => installed.includes(pkg))
   }
@@ -693,13 +719,14 @@ async function runUpdate(context: WizardContext, t: T, options: DzcfOptions): Pr
       type: 'multiselect',
       name: 'update',
       message: t('updatePrompt'),
-      choices: installed.map(pkg => ({ name: pkg, value: pkg })),
+      choices: [{ name: t('selectAll'), value: SELECT_ALL }, ...installed.map(pkg => ({ name: pkg, value: pkg }))],
+      initial: installed,
     })
     if (outcome.status === 'cancelled') {
       out(t('cancelled'))
       return 0
     }
-    toUpdate = (outcome.value.update as readonly string[] | undefined) ?? []
+    toUpdate = expandSelectAll((outcome.value.update as readonly string[] | undefined) ?? [], installed)
   } else {
     // No explicit --plugin list in a non-interactive run updates everything.
     toUpdate = options.plugins.length > 0 ? options.plugins.filter(pkg => installed.includes(pkg)) : installed
