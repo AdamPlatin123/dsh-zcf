@@ -315,6 +315,10 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '插件 {plugin} 更新失败：{stderr}',
     'en': 'Plugin {plugin} update failed: {stderr}',
   },
+  updateFailedSummary: {
+    'zh-CN': '以下插件更新失败：{plugins}。其余已完成；可重跑 u 命令重试失败项。',
+    'en': 'These plugins failed to update: {plugins}. The rest completed; rerun the update flow to retry the failures.',
+  },
   pluginRemoving: {
     'zh-CN': '正在移除插件 {plugin}……',
     'en': 'Removing plugin {plugin}…',

@@ -713,14 +713,20 @@ async function runUpdate(context: WizardContext, t: T, options: DzcfOptions): Pr
     for (const pkg of toUpdate) out(`  - update ${pkg} -> latest`)
     return 0
   }
+  const failed: string[] = []
   for (const pkg of toUpdate) {
     out(t('pluginUpdating', { plugin: pkg }))
     const result = installPlugin(run, profile, pkg)
     if (result.status !== 0) {
       err(t('pluginUpdateFailed', { plugin: pkg, stderr: result.stderr.trim() }))
-      return 1
+      failed.push(pkg)
+      continue
     }
     out(t('pluginUpdated', { plugin: pkg }))
+  }
+  if (failed.length > 0) {
+    err(t('updateFailedSummary', { plugins: failed.join(', ') }))
+    return 1
   }
   return 0
 }

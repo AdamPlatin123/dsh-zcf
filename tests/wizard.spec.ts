@@ -641,6 +641,21 @@ describe('runWizard — marketplace and manage', () => {
     expect(lines.join('\n')).toContain('update dsh-lens -> latest')
   })
 
+  it('continues updating the rest when one plugin update fails', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-lens', 'dsh-spend'] } } }))
+    const { run, calls } = scriptedRun({ dsh: args => (args.includes('add') && args.includes('dsh-lens')
+      ? { status: 1, stdout: '', stderr: 'registry boom' }
+      : { status: 0, stdout: '', stderr: '' }) })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), { ...OPTIONS, action: 'update' })
+    expect(code).toBe(1)
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-lens'] })
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-spend'] })
+    expect(lines.join('\n')).toContain('dsh-spend 已更新到最新版')
+  })
+
   it('fails loud when the update target profile is missing', async () => {
     const home = await tempHome()
     const lines: string[] = []

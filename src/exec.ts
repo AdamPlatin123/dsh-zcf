@@ -82,7 +82,9 @@ const PROBE_TIMEOUT_MS = 3000
 export async function probeRegistryLatency(url: string): Promise<number | undefined> {
   const started = Date.now()
   try {
-    await fetch(`${url}/-/ping`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) })
+    const response = await fetch(`${url}/-/ping`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) })
+    // A fast error page is not a usable registry: only a healthy ping counts.
+    if (!response.ok) return undefined
   } catch {
     return undefined
   }
