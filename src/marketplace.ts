@@ -1,5 +1,5 @@
 /**
- * Recommended-plugin catalog for the dsh-zcf wizard: thirty-two entries from
+ * Recommended-plugin catalog for the dsh-zcf wizard: twenty-five entries from
  * the community radar (awesome-dsh-plugins), each passing both gates — the
  * radar's runtime-verified verdict and an npm package that actually exists —
  * spread across directions, all installable as plain npm packages — `dsh plugin add -w`
@@ -49,12 +49,6 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     hint: { 'zh-CN': '文件写入即时反馈：LSP、linter、formatter、ast-grep、符号搜索', 'en': 'Live feedback on file writes: LSP, linter, formatter, ast-grep, symbol search' },
   },
   {
-    id: 'dsh-ci-doctor',
-    category: 'coding',
-    label: { 'zh-CN': 'dsh-ci-doctor CI 医生', 'en': 'dsh-ci-doctor CI doctor' },
-    hint: { 'zh-CN': '后台盯 CI 失败并按日志签名诊断，去重台账', 'en': 'Background CI failure watcher with log-signature diagnosis and dedupe ledger' },
-  },
-  {
     id: 'dsh-file-review',
     category: 'coding',
     label: { 'zh-CN': 'dsh-file-review 变更审查', 'en': 'dsh-file-review diff view' },
@@ -67,10 +61,10 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     hint: { 'zh-CN': '交付前需求审讯、红绿测试证据门与对抗评审', 'en': 'Pre-delivery requirement grilling, red-green test evidence gate, adversarial review' },
   },
   {
-    id: 'superpowers-dsh',
+    id: 'dsh-at-file',
     category: 'coding',
-    label: { 'zh-CN': 'superpowers-dsh 开发技能集', 'en': 'superpowers-dsh dev skills' },
-    hint: { 'zh-CN': 'TDD、调试、计划等开发工作流技能集', 'en': 'Development workflow skills: TDD, debugging, planning' },
+    label: { 'zh-CN': 'dsh-at-file 文件引用', 'en': 'dsh-at-file file references' },
+    hint: { 'zh-CN': 'Codex 风格 @file 引用：搜索并挂载工作区文件', 'en': 'Codex-style @file references: search and attach workspace files' },
   },
   {
     id: 'dsh-mcp-adapter',
@@ -91,22 +85,10 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     hint: { 'zh-CN': '文件/命令/HTTP/进程/webhook 传感器事件驱动唤醒 agent loop', 'en': 'Event-driven agent-loop wakeup via file/command/HTTP/process/webhook sensors' },
   },
   {
-    id: 'dsh-vision-proxy',
-    category: 'agent',
-    label: { 'zh-CN': 'dsh-vision-proxy 自动识图', 'en': 'dsh-vision-proxy auto vision' },
-    hint: { 'zh-CN': '无视觉主模型经视觉模型转译图片，无 key 自动探测本地 Ollama', 'en': 'Transcribes images via a VLM for visionless models; auto-detects local Ollama without a key' },
-  },
-  {
     id: 'dsh-vision-router',
     category: 'agent',
     label: { 'zh-CN': 'dsh-vision-router 视觉路由', 'en': 'dsh-vision-router vision router' },
     hint: { 'zh-CN': '内置免费视觉模型路由，给文本 agent 加上视觉', 'en': 'Built-in free vision-model routing that gives text agents eyes' },
-  },
-  {
-    id: 'dsh-office',
-    category: 'web-ui',
-    label: { 'zh-CN': 'dsh-office 工作台仪表盘', 'en': 'dsh-office workspace dashboard' },
-    hint: { 'zh-CN': '悬浮工作台/会话仪表盘，含 token 与子代理视图', 'en': 'Floating workspace/session dashboard with token and subagent views' },
   },
   {
     id: 'dsh-spend',
@@ -115,28 +97,10 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     hint: { 'zh-CN': 'token 用量与估算成本悬浮窗，多模型费率库', 'en': 'Token usage and estimated cost floating window with multi-model rates' },
   },
   {
-    id: 'dsh-turn-index',
-    category: 'web-ui',
-    label: { 'zh-CN': 'dsh-turn-index 轮次索引', 'en': 'dsh-turn-index turn index' },
-    hint: { 'zh-CN': '逐轮问题索引侧栏，点击跳转', 'en': 'Turn-by-turn question index sidebar with click-to-jump' },
-  },
-  {
     id: 'dsh-outline',
     category: 'web-ui',
     label: { 'zh-CN': 'dsh-outline 大纲树', 'en': 'dsh-outline outline tree' },
     hint: { 'zh-CN': '从用户问题与 Markdown 标题实时生成大纲', 'en': 'Live outline tree from user questions and Markdown headings' },
-  },
-  {
-    id: 'dsh-ui-quote-selection',
-    category: 'web-ui',
-    label: { 'zh-CN': 'dsh-ui-quote-selection 划词引用', 'en': 'dsh-ui-quote-selection quote selection' },
-    hint: { 'zh-CN': '选中文字一键引用到输入框，发送自动附完整原文', 'en': 'One-click quote of selected text into the composer, full source attached on send' },
-  },
-  {
-    id: 'dsh-session-pins',
-    category: 'web-ui',
-    label: { 'zh-CN': 'dsh-session-pins 会话置顶', 'en': 'dsh-session-pins session pins' },
-    hint: { 'zh-CN': '侧边栏持久置顶常用会话，快速打开', 'en': 'Pin frequently-used sessions in the sidebar for quick access' },
   },
   {
     id: 'dsh-message-edit',
@@ -187,18 +151,6 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     hint: { 'zh-CN': '插件静态权限画像 + 凭据访问/出网运行时哨兵', 'en': 'Static permission profiler plus runtime sentinel on credential access and egress' },
   },
   {
-    id: 'dsh-vps-hub',
-    category: 'infra',
-    label: { 'zh-CN': 'dsh-vps-hub SSH 台账', 'en': 'dsh-vps-hub SSH ledger' },
-    hint: { 'zh-CN': '本地 VPS 台账与 8 个 vps_* 工具：发现/测试/执行/传输，密钥仅路径引用', 'en': 'Local VPS ledger with 8 vps_* tools: discover/test/exec/transfer; keys referenced by path only' },
-  },
-  {
-    id: 'dsh-lan-access',
-    category: 'infra',
-    label: { 'zh-CN': 'dsh-lan-access 局域网访问', 'en': 'dsh-lan-access LAN access' },
-    hint: { 'zh-CN': 'Web GUI 绑 0.0.0.0 供局域网访问，修复非安全上下文 RPC', 'en': 'Binds the web GUI to 0.0.0.0 for LAN access and fixes RPC on insecure contexts' },
-  },
-  {
     id: 'dsh-full-remote',
     category: 'infra',
     label: { 'zh-CN': 'dsh-full-remote 远程访问', 'en': 'dsh-full-remote remote access' },
@@ -221,6 +173,12 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     category: 'web',
     label: { 'zh-CN': 'dsh-web-access 联网访问', 'en': 'dsh-web-access web access' },
     hint: { 'zh-CN': '多提供商联网搜索/抓取/源校验，带 Web 面板', 'en': 'Multi-provider web search/fetch/source check with a web panel' },
+  },
+  {
+    id: 'modsearch',
+    category: 'web',
+    label: { 'zh-CN': 'modsearch 搜索桥', 'en': 'modsearch search bridge' },
+    hint: { 'zh-CN': '纯文本 agent 的网页搜索桥：web/X 结构化 JSON 证据', 'en': 'Web-search bridge for text-only agents: structured JSON evidence from web/X' },
   },
   {
     id: 'dsh-claude-move',
