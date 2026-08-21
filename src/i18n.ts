@@ -296,12 +296,16 @@ export const MESSAGES: MessageTable = {
     'en': 'Registered plugins:',
   },
   manageRemovePrompt: {
-    'zh-CN': '选择要移除的插件（空格选择，回车确认；不选则保留全部）：',
-    'en': 'Pick plugins to remove (space to pick, enter to confirm; none keeps everything):',
+    'zh-CN': '选择要移除的插件（首项 (全部) 即全选；空格选择，回车确认；不选则保留全部）：',
+    'en': 'Pick plugins to remove (first entry (All) selects all; space to pick, enter to confirm; none keeps everything):',
+  },
+  selectAll: {
+    'zh-CN': '(全部)',
+    'en': '(All)',
   },
   updatePrompt: {
-    'zh-CN': '选择要更新的插件（空格选择，回车确认；不选则保持现状）：',
-    'en': 'Pick plugins to update (space to pick, enter to confirm; none keeps everything as-is):',
+    'zh-CN': '选择要更新的插件（默认全选；空格取消，回车确认；首项 (全部) 可一键恢复全选）：',
+    'en': 'Pick plugins to update (all preselected; space to untick, enter to confirm; first entry (All) restores all):',
   },
   pluginUpdating: {
     'zh-CN': '正在更新插件 {plugin}……',

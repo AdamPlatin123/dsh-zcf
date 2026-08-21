@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DzcfOptions } from '../src/args.ts'
 import { credentialsPath, readCredentials } from '../src/credentials.ts'
+import { RECOMMENDED_PLUGINS } from '../src/marketplace.ts'
 import type { RunFn, RunResult } from '../src/exec.ts'
 import type { PromptOutcome, PromptQuestion } from '../src/ui.ts'
 import { runWizard, type WizardContext } from '../src/wizard.ts'
@@ -603,6 +604,18 @@ describe('runWizard — marketplace and manage', () => {
     const code = await runWizard(await context({ home, ...outputLines(lines) }), { ...OPTIONS, action: 'manage' })
     expect(code).toBe(1)
     expect(lines.join('\n')).toContain('profile 不存在')
+  })
+
+  it('expands the (All) sentinel into every catalog entry', async () => {
+    const home = await tempHome()
+    const { run, calls } = scriptedRun()
+    const { prompt } = scriptedPrompt({ plugins: ['__ALL__'] })
+    const code = await runWizard(await context({ home, run, prompt, interactive: true }), {
+      ...OPTIONS, action: 'marketplace', profile: 'dzcf',
+    })
+    expect(code).toBe(0)
+    const adds = calls.filter(call => call.command === 'dsh' && call.args.includes('add') && !call.args.at(-1)!.startsWith('@'))
+    expect(adds).toHaveLength(RECOMMENDED_PLUGINS.length)
   })
 
   it('updates only the picked plugins in a non-interactive update', async () => {

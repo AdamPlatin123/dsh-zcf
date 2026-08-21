@@ -1,7 +1,7 @@
 {
   "name": "dsh-zcf",
   "description": "dsh-zcf: zero-config DeepSeek Harness setup wizard — install dsh, store provider credentials, and pick a runnable profile",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publishConfig": {
     "access": "public"
   },
