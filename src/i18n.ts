@@ -151,6 +151,10 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '模型目录写入失败：{reason}',
     'en': 'Writing the model catalog failed: {reason}',
   },
+  returnToMenu: {
+    'zh-CN': '操作完成。回到主页选择其它操作吗？',
+    'en': 'Done. Return to the main menu to pick another action?',
+  },
   kMenuPrompt: {
     'zh-CN': '凭据管理 — 要更新哪一项？',
     'en': 'Credential management — what to update?',

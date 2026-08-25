@@ -23,7 +23,7 @@ dsh-zcf (DeepSeek Zero-Config Flow) is the one-command setup wizard for DeepSeek
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/AdamPlatin123/dsh-zcf/master/install.sh | bash
-npx dsh-zcf            # interactive menu: init / plugin market / manage / advanced / credentials
+npx dsh-zcf            # interactive menu: init / plugin market / manage / update / advanced / credentials (after each flow: return to menu or exit)
 npx dsh-zcf i          # full init (same as the bare command)
 npx dsh-zcf n          # recommended-plugin market
 dsh-zcf --help          # grammar (after a global install)

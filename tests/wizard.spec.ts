@@ -314,7 +314,7 @@ describe('runWizard — interactive', () => {
       ...outputLines(lines),
     }, { ...OPTIONS })
     expect(code).toBe(0)
-    expect(asked.map(question => question.type)).toEqual(['input', 'password', 'input', 'list', 'multiselect', 'confirm'])
+    expect(asked.map(question => question.type)).toEqual(['input', 'password', 'input', 'list', 'multiselect', 'confirm', 'confirm'])
     expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-typed' })
   })
 
@@ -788,6 +788,29 @@ describe('runWizard — marketplace and manage', () => {
     const patch = await readFile(join(home, 'profiles', 'dzcf', 'cordis.patch.yml'), 'utf8')
     expect(patch).toContain('id: deepseek-v4-pro')
     expect(lines.join('\n')).toContain('deepseek-v4-pro 已写入')
+  })
+
+  it('offers returning to the main menu after a finished interactive flow', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-lens'] } } }))
+    const asked: PromptQuestion[] = []
+    const prompt = async (questions: readonly PromptQuestion[]): Promise<PromptOutcome> => {
+      const question = questions[0]
+      if (question === undefined) return { status: 'cancelled' }
+      asked.push(question)
+      if (question.name === 'returnToMenu') return { status: 'answered', value: { returnToMenu: true } }
+      if (question.name === 'action') return { status: 'answered', value: { action: 'exit' } }
+      return { status: 'answered', value: { update: ['dsh-lens'] } }
+    }
+    const { run, calls } = scriptedRun()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, prompt, interactive: true, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'update',
+    })
+    expect(code).toBe(0)
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-lens'] })
+    expect(asked.map(question => question.name)).toEqual(['update', 'returnToMenu', 'action'])
   })
 
   it('fails loud when the update target profile is missing', async () => {

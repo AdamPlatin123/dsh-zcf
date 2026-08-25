@@ -1100,14 +1100,26 @@ async function pickAction(context: WizardContext, t: T, options: DzcfOptions): P
  */
 export async function runWizard(context: WizardContext, options: DzcfOptions): Promise<number> {
   const t: T = (key, params) => translate(MESSAGES, context.lang, key, params)
-  const action = await pickAction(context, t, options)
-  switch (action) {
-    case 'init': return runInit(context, t, options)
-    case 'marketplace': return runMarketplace(context, t, options)
-    case 'manage': return runManage(context, t, options)
-    case 'update': return runUpdate(context, t, options)
-    case 'configure': return runConfigure(context, t, options)
-    case 'credentials': return runCredentials(context, t, options)
-    case 'exit': return 0
+  let action = await pickAction(context, t, options)
+  while (true) {
+    let code: number
+    switch (action) {
+      case 'init': code = await runInit(context, t, options); break
+      case 'marketplace': code = await runMarketplace(context, t, options); break
+      case 'manage': code = await runManage(context, t, options); break
+      case 'update': code = await runUpdate(context, t, options); break
+      case 'configure': code = await runConfigure(context, t, options); break
+      case 'credentials': code = await runCredentials(context, t, options); break
+      default: code = 0
+    }
+    // A finished flow only loops back to the menu when the interactive user
+    // asks for it; non-interactive and --yes runs exit straight away, and a
+    // failed flow exits with its code instead of offering another round.
+    if (code !== 0 || !context.interactive || options.yes) return code
+    const again = await askOne(context.prompt, { type: 'confirm', name: 'returnToMenu', message: t('returnToMenu'), default: false })
+    if (again.status === 'cancelled' || again.value.returnToMenu !== true) return code
+    const next = await pickAction(context, t, { ...options, action: 'menu' })
+    if (next === 'exit') return code
+    action = next
   }
 }
