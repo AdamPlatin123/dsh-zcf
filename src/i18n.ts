@@ -51,6 +51,10 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '现在用 {pm} 全局安装 @deepseek-ai/dsh 吗？',
     'en': 'Install @deepseek-ai/dsh globally with {pm} now?',
   },
+  pnpmDowngradeNotice: {
+    'zh-CN': '检测到 pnpm {major}：dsh 的插件管理按 pnpm 10 的行为设计（pnpm 11 会把被拒构建脚本当作安装失败）。正在降级到 pnpm 10……',
+    'en': 'pnpm {major} detected: the launcher expects pnpm 10 semantics (pnpm 11 treats refused build scripts as a hard failure). Downgrading to pnpm 10…',
+  },
   pnpmInstalling: {
     'zh-CN': '正在安装 pnpm：{command}',
     'en': 'Installing pnpm: {command}',

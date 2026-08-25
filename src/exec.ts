@@ -22,6 +22,7 @@ export type RunFn = (
   args: readonly string[],
   env?: Readonly<Record<string, string | undefined>>,
   timeoutMs?: number,
+  cwd?: string,
 ) => RunResult
 
 /**
@@ -37,6 +38,7 @@ export function runCommand(
   args: readonly string[],
   env?: Readonly<Record<string, string | undefined>>,
   timeoutMs?: number,
+  cwd?: string,
 ): RunResult {
   const result = spawnSync(command, [...args], {
     encoding: 'utf8',
@@ -44,6 +46,7 @@ export function runCommand(
     // A hung pnpm (store-lock wait on a broken profile) must surface as a
     // failed run the wizard can recover from, not an indefinite stall.
     ...(timeoutMs === undefined ? {} : { timeout: timeoutMs }),
+    ...(cwd === undefined ? {} : { cwd }),
   })
   if (result.error !== undefined) {
     return { status: null, stdout: '', stderr: result.error.message }

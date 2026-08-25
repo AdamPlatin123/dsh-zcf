@@ -7,6 +7,7 @@
  * @module dsh-zcf
  */
 
+import { tmpdir } from 'node:os'
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { dshHomeDisplay } from '@deepseek-ai/dsh-home-paths'
@@ -132,9 +133,21 @@ async function pickRegistry(context: WizardContext, t: T, options: DzcfOptions):
   return { status: 'picked', registry: typeof outcome.value.registry === 'string' ? outcome.value.registry : undefined }
 }
 
-/** Whether `pnpm` answers on the PATH. */
-function pnpmAvailable(run: RunFn): boolean {
-  return run('pnpm', ['-v']).status === 0
+/** The pinned pnpm major. pnpm 10 treats refused dependency build scripts as
+ * a warning; pnpm 11 turns them into a hard install failure the launcher
+ * reports as a broken profile, and its allowlist keys do not change that. */
+const PNPM_MAJOR = 10
+
+/** The PATH pnpm's major version, or undefined when pnpm does not answer. */
+function pnpmMajorVersion(run: RunFn): number | undefined {
+  // Probe from a neutral directory: pnpm 11 reads a `packageManager` field
+  // from the nearest package.json and self-switches to that version, which
+  // would shadow whatever the wizard installs for a user running inside such
+  // a project.
+  const result = run('pnpm', ['-v'], undefined, undefined, tmpdir())
+  if (result.status !== 0) return undefined
+  const major = Number.parseInt(result.stdout.trim().split('.')[0] ?? '', 10)
+  return Number.isNaN(major) ? undefined : major
 }
 
 /**
@@ -149,16 +162,20 @@ function pnpmAvailable(run: RunFn): boolean {
  */
 function ensurePnpm(context: WizardContext, t: T, options: DzcfOptions): boolean {
   const { run, out, err } = context
-  if (pnpmAvailable(run)) return true
-  const pm = detectPackageManager(run)
+  const currentMajor = pnpmMajorVersion(run)
+  if (currentMajor === PNPM_MAJOR) return true
+  // A wrong-major pnpm must be replaced through npm: `pm` may resolve to that
+  // very pnpm, and the uninstall below would remove it out from under us.
+  const needsDowngrade = currentMajor !== undefined && currentMajor !== PNPM_MAJOR
+  const pm = needsDowngrade ? 'npm' : detectPackageManager(run)
   if (pm === undefined) {
     err(t('noPackageManager'))
     return false
   }
   const registryArgs = options.registry === undefined ? [] : [`--registry=${options.registry}`]
   const args = pm === 'pnpm'
-    ? ['add', '--global', 'pnpm', ...registryArgs]
-    : ['install', '--global', 'pnpm', '--no-audit', '--no-fund', ...registryArgs]
+    ? ['add', '--global', `pnpm@${PNPM_MAJOR}`, ...registryArgs]
+    : ['install', '--global', `pnpm@${PNPM_MAJOR}`, '--no-audit', '--no-fund', ...registryArgs, ...(needsDowngrade ? ['--force'] : [])]
   if (options.dryRun) {
     out(t('dryRunNotice'))
     out(`  - ${pm} ${args.join(' ')}`)
@@ -166,9 +183,20 @@ function ensurePnpm(context: WizardContext, t: T, options: DzcfOptions): boolean
   }
   // No separate confirmation: the user already agreed to the (much larger)
   // dsh install, and pnpm is its runtime companion, not a new decision.
+  if (needsDowngrade) {
+    out(t('pnpmDowngradeNotice', { major: String(currentMajor) }))
+    // npm refuses to replace an existing global bin without removing it first.
+    const uninstall = run('npm', ['uninstall', '--global', 'pnpm'])
+    if (uninstall.status !== 0) {
+      err(t('pnpmInstallFailed', { stderr: uninstall.stderr.trim() }))
+      return false
+    }
+  }
   out(t('pnpmInstalling', { command: `${pm} ${args.join(' ')}` }))
   const install = run(pm, args)
-  if (install.status !== 0 || !pnpmAvailable(run)) {
+  // Judge by the result: a --force reinstall may exit nonzero over a warning
+  // while the binary is actually in place at the right major.
+  if (pnpmMajorVersion(run) !== PNPM_MAJOR) {
     err(t('pnpmInstallFailed', { stderr: install.stderr.trim() }))
     return false
   }

@@ -51,7 +51,8 @@ function scriptedRun(overrides: Readonly<Record<string, (args: readonly string[]
     if (command === 'dsh' && args[0] === '--profile' && (args[2] === '--dump-default-config' || args[2] === '--dump-config')) return { status: 0, stdout: '# composed\n', stderr: '' }
     if (command === 'dsh' && args[0] === 'plugin' && args.includes('add')) return { status: 0, stdout: '', stderr: '' }
     if (command === 'dsh' && args[0] === 'plugin') return { status: 0, stdout: '', stderr: '' }
-    if (command === 'pnpm' || command === 'npm') return { status: 0, stdout: '', stderr: '' }
+    if (command === 'pnpm') return { status: 0, stdout: '10.18.0\n', stderr: '' }
+    if (command === 'npm') return { status: 0, stdout: '11.0.0\n', stderr: '' }
     return { status: null, stdout: '', stderr: `command not found: ${command}` }
   }
   return { run, calls }
@@ -690,7 +691,7 @@ describe('runWizard — marketplace and manage', () => {
     const home = await tempHome()
     let pnpmReady = false
     const { run, calls } = scriptedRun({
-      pnpm: () => (pnpmReady ? { status: 0, stdout: '', stderr: '' } : { status: null, stdout: '', stderr: 'command not found: pnpm' }),
+      pnpm: () => (pnpmReady ? { status: 0, stdout: '10.18.0\n', stderr: '' } : { status: null, stdout: '', stderr: 'command not found: pnpm' }),
       npm: () => { pnpmReady = true; return { status: 0, stdout: '', stderr: '' } },
     })
     const lines: string[] = []
@@ -698,7 +699,7 @@ describe('runWizard — marketplace and manage', () => {
       ...OPTIONS, action: 'marketplace', plugins: ['dsh-lens'],
     })
     expect(code).toBe(0)
-    expect(calls).toContainEqual({ command: 'npm', args: ['install', '--global', 'pnpm', '--no-audit', '--no-fund'] })
+    expect(calls).toContainEqual({ command: 'npm', args: ['install', '--global', 'pnpm@10', '--no-audit', '--no-fund'] })
     expect(lines.join('\n')).toContain('pnpm 安装完成')
   })
 
@@ -709,7 +710,7 @@ describe('runWizard — marketplace and manage', () => {
       ...OPTIONS, action: 'marketplace', plugins: ['dsh-lens'],
     })
     expect(code).toBe(0)
-    expect(calls).not.toContainEqual({ command: 'npm', args: ['install', '--global', 'pnpm', '--no-audit', '--no-fund'] })
+    expect(calls).not.toContainEqual({ command: 'npm', args: ['install', '--global', 'pnpm@10', '--no-audit', '--no-fund'] })
   })
 
   it('reuses the stored key in a non-interactive run without --key', async () => {
@@ -859,7 +860,8 @@ describe('runWizard — marketplace and manage', () => {
           : { status: 0, stdout: '# composed\n', stderr: '' }
       }
       if (command === 'dsh' && args[0] === 'plugin' && args.includes('add')) return { status: 0, stdout: '', stderr: '' }
-      if (command === 'pnpm' || command === 'npm') return { status: 0, stdout: '', stderr: '' }
+      if (command === 'pnpm') return { status: 0, stdout: '10.18.0\n', stderr: '' }
+      if (command === 'npm') return { status: 0, stdout: '11.0.0\n', stderr: '' }
       return { status: null, stdout: '', stderr: `command not found: ${command}` }
     }
     const lines: string[] = []
@@ -885,7 +887,9 @@ describe('runWizard — marketplace and manage', () => {
           : { status: 0, stdout: '', stderr: '' }
       }
       if (command === 'dsh' && args[0] === '-V') return { status: 0, stdout: '0.0.1-rc.4\n', stderr: '' }
-      if (command === 'dsh' || command === 'pnpm' || command === 'npm') return { status: 0, stdout: '', stderr: '' }
+      if (command === 'dsh') return { status: 0, stdout: '', stderr: '' }
+      if (command === 'pnpm') return { status: 0, stdout: '10.18.0\n', stderr: '' }
+      if (command === 'npm') return { status: 0, stdout: '11.0.0\n', stderr: '' }
       return { status: null, stdout: '', stderr: `command not found: ${command}` }
     }
     const lines: string[] = []
