@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -688,5 +688,13 @@ describe('runWizard — marketplace and manage', () => {
     expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', '@deepseek-harness-tui/dsh-tui'] })
     expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-doublecheck'] })
     expect(lines.join('\n')).toContain('dsh --profile dzcf')
+  })
+})
+
+describe('bin launcher wiring', () => {
+  it('points bin at the CommonJS version gate, which exists', async () => {
+    const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { bin: Record<string, string> }
+    expect(manifest.bin['dsh-zcf']).toBe('lib/cli.cjs')
+    await expect(access(new URL('../src/cli.cjs', import.meta.url))).resolves.toBeUndefined()
   })
 })

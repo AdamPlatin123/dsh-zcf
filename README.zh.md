@@ -28,6 +28,8 @@ npx dsh-zcf n          # recommended-plugin market
 dsh-zcf --help          # grammar (after a global install)
 ```
 
+需要 Node.js >= 22.12（`node -v` 查看）。旧版本运行时不会打印堆栈，而是输出双语升级指引。
+
 非交互（CI、脚本）：
 
 ```sh

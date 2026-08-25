@@ -28,6 +28,8 @@ npx dsh-zcf n          # recommended-plugin market
 dsh-zcf --help          # grammar (after a global install)
 ```
 
+Requires Node.js >= 22.12 (`node -v`). On an older runtime the launcher prints a bilingual upgrade hint instead of a stack trace.
+
 Non-interactive (CI, scripts):
 
 ```sh
