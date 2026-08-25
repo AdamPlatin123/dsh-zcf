@@ -151,6 +151,10 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '模型目录写入失败：{reason}',
     'en': 'Writing the model catalog failed: {reason}',
   },
+  npmrcWritten: {
+    'zh-CN': '✓ 已为 {profile} 设置插件安装源：{registry}（写入 profile 的 .npmrc）',
+    'en': '✓ Plugin registry for {profile} set to {registry} (profile .npmrc)',
+  },
   returnToMenu: {
     'zh-CN': '操作完成。回到主页选择其它操作吗？',
     'en': 'Done. Return to the main menu to pick another action?',

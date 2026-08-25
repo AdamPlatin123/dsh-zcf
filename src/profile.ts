@@ -27,6 +27,28 @@ function pluginAdd(run: RunFn, profile: string, pkg: string): RunResult {
   return run('dsh', ['plugin', '--profile', profile, 'add', '-w', pkg])
 }
 
+/**
+ * Persist the chosen npm registry into the profile directory's `.npmrc`, so
+ * every later pnpm run inside the profile — the wizard's plugin installs and
+ * the launcher's own `dsh plugin` calls alike — resolves through it. An
+ * existing `registry=` line is replaced; other lines survive.
+ * @param home - resolved harness home.
+ * @param profile - profile name.
+ * @param registry - registry base URL.
+ */
+export async function writeProfileNpmrc(home: string, profile: string, registry: string): Promise<void> {
+  const path = join(home, 'profiles', profile, '.npmrc')
+  let text = ''
+  try {
+    text = readFileSync(path, 'utf8')
+  } catch {
+    // absent file is the common case on a fresh profile
+  }
+  const lines = text.split('\n').filter(line => line !== '' && !line.startsWith('registry='))
+  lines.push(`registry=${registry}`)
+  await writeFileAtomic(path, `${lines.join('\n')}\n`, { mode: 0o600, dirMode: 0o700 })
+}
+
 /** Run `dsh plugin --profile <name> remove -w <pkg>`; nonzero fails the run. */
 function pluginRemove(run: RunFn, profile: string, pkg: string): RunResult {
   return run('dsh', ['plugin', '--profile', profile, 'remove', '-w', pkg])

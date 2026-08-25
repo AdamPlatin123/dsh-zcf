@@ -813,6 +813,37 @@ describe('runWizard — marketplace and manage', () => {
     expect(asked.map(question => question.name)).toEqual(['update', 'returnToMenu', 'action'])
   })
 
+  it('persists --registry into the profile .npmrc before installing plugins', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } } }))
+    const { run, calls } = scriptedRun()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'marketplace', plugins: ['dsh-lens'], registry: 'https://registry.npmmirror.com',
+    })
+    expect(code).toBe(0)
+    const npmrc = await readFile(join(home, 'profiles', 'dzcf', '.npmrc'), 'utf8')
+    expect(npmrc).toContain('registry=https://registry.npmmirror.com')
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-lens'] })
+    expect(lines.join('\n')).toContain('registry.npmmirror.com')
+  })
+
+  it('asks once for a plugin registry in interactive runs and writes it', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } } }))
+    const { prompt, asked } = scriptedPrompt({ registry: 'https://registry.npmmirror.com', plugins: ['dsh-lens'] })
+    const { run } = scriptedRun()
+    const code = await runWizard(await context({ home, run, prompt, interactive: true, probeRegistry: async () => 50 }), {
+      ...OPTIONS, action: 'marketplace', profile: 'dzcf',
+    })
+    expect(code).toBe(0)
+    expect(asked.some(question => question.name === 'registry')).toBe(true)
+    const npmrc = await readFile(join(home, 'profiles', 'dzcf', '.npmrc'), 'utf8')
+    expect(npmrc).toContain('registry=https://registry.npmmirror.com')
+  })
+
   it('fails loud when the update target profile is missing', async () => {
     const home = await tempHome()
     const lines: string[] = []

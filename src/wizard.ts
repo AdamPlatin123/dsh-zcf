@@ -18,7 +18,7 @@ import type { RunFn, RunResult } from './exec.ts'
 import { detectPackageManager, dshAvailable, installDshArgs, REGISTRY_OPTIONS } from './exec.ts'
 import { ensureHomeDirectory, maskKey, readCredentials, writeCredentials } from './credentials.ts'
 import { writeEnvFile } from './dotenv.ts'
-import { createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, removePlugin } from './profile.ts'
+import { createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, removePlugin, writeProfileNpmrc } from './profile.ts'
 
 /** Everything the wizard touches that an environment can provide. */
 export interface WizardContext {
@@ -451,13 +451,63 @@ function initPlanLines(
   return lines
 }
 
+/** Registry decision per wizard context, so the mirror question is asked once per session. */
+const registryDecisions = new WeakMap<WizardContext, { asked: boolean; registry: string | undefined }>()
+
+/**
+ * Make the profile's plugin installs resolve through a registry the user
+ * picked: `--registry` wins; an interactive run with plugins to install asks
+ * once per process (with measured candidates); non-interactive runs keep the
+ * package manager default. The decision lands in the profile's `.npmrc`, so
+ * the launcher's own later pnpm calls inherit it too.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param options - resolved command-line options.
+ * @param profile - profile name.
+ * @param pluginCount - how many plugin installs are about to run.
+ */
+async function ensureProfileRegistry(
+  context: WizardContext,
+  t: T,
+  options: DzcfOptions,
+  profile: string,
+  pluginCount: number,
+): Promise<void> {
+  const { out } = context
+  if (pluginCount === 0) return
+  const decision = registryDecisions.get(context)
+  let registry = options.registry
+  if (registry === undefined && context.interactive && decision?.asked !== true) {
+    const choice = await pickRegistry(context, t, options)
+    if (choice.status === 'cancelled') return
+    // Only a made decision is remembered; an Esc leaves the question open
+    // for the next flow in this same session.
+    registryDecisions.set(context, { asked: true, registry: choice.registry })
+    registry = choice.registry
+  } else if (registry === undefined) {
+    registry = decision?.registry
+  }
+  if (registry === undefined || registry === '') return
+  if (options.dryRun) {
+    out(t('dryRunNotice'))
+    out(`  - ${profile} .npmrc registry=${registry}`)
+    return
+  }
+  await writeProfileNpmrc(context.home, profile, registry)
+  out(t('npmrcWritten', { profile, registry }))
+}
+
 /** Install recommended plugins into a profile; false on first failure. */
 function installPlugins(context: WizardContext, t: T, profile: string, plugins: readonly RecommendedPlugin[]): boolean {
   for (const plugin of plugins) {
     context.out(t('pluginInstalling', { plugin: plugin.id }))
     const result = installPlugin(context.run, profile, plugin.id)
     if (result.status !== 0) {
-      context.err(t('pluginInstallFailed', { plugin: plugin.id, stderr: result.stderr.trim() }))
+      // The launcher folds pnpm's own failure into one line, while the real
+      // cause (peer conflicts, fetch errors) usually lands on captured
+      // stdout — surface the tail of both so the user can diagnose.
+      const detail = [result.stderr.trim(), result.stdout.trim()].filter(part => part !== '').join('\n')
+      context.err(t('pluginInstallFailed', { plugin: plugin.id, stderr: detail }))
       return false
     }
     context.out(t('pluginInstalled', { plugin: plugin.id }))
@@ -712,6 +762,7 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
     return 1
   }
   out(t('profileCreated', { profile }))
+  await ensureProfileRegistry(context, t, options, profile, plugins.length)
   if (!installPlugins(context, t, profile, plugins)) return 1
 
   if (collected.state.model !== undefined) {
@@ -761,6 +812,7 @@ async function runMarketplace(context: WizardContext, t: T, options: DzcfOptions
     }
     out(t('profileCreated', { profile }))
   }
+  await ensureProfileRegistry(context, t, options, profile, plugins.length)
   if (!installPlugins(context, t, profile, plugins)) return 1
   const verify = run('dsh', ['--profile', profile, '--dump-config'])
   if (verify.status !== 0) {
