@@ -60,9 +60,10 @@ Nothing else is touched: no profile files are rewritten, no `cordis.yml` is gene
 | `l` | Manage installed plugins: list and remove picked ones (default dzcf profile). |
 | `u` | Update installed plugins: multi-select refreshes picked entries to npm latest; non-interactive with no `--plugin` updates all. |
 | `c` | Advanced integrations; requires `--profile` and `--with`. |
-| `k` | Update credentials only (key / base URL). |
+| `k` | Credential management menu: update the key, the base URL, pick a model from the upstream `GET /models` listing, or reconfigure all (endpoint, key, model). |
 | `-k, --key <key>` | API key; skip the masked prompt. |
 | `--base-url <url>` | Endpoint override; any http(s) URL, else exit 1. |
+| `--model <id>` | Pin this model id into the profile's model catalog (interactive flows also list the upstream `GET /models` result). |
 | `-m, --mode <mode>` | `tui`, `web`, or `app`; skip the list prompt. |
 | `-l, --lang <lang>` | Interface language: `zh-CN` (default) or `en`. |
 | `-y, --yes` | Assume yes for the install and write confirmations. |

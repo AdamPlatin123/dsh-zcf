@@ -123,6 +123,54 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '重新输入一个新的 API Key',
     'en': 'Enter a new API key instead',
   },
+  modelPrompt: {
+    'zh-CN': '选择要固定到 profile 目录的上游模型：',
+    'en': 'Pick the upstream model to pin into the profile catalog:',
+  },
+  modelSkip: {
+    'zh-CN': '跳过（保留发行版默认模型目录）',
+    'en': 'Skip (keep the shipped model catalog)',
+  },
+  modelFetchFailed: {
+    'zh-CN': '未能从上游获取模型列表（网络或鉴权失败），可手动输入模型 id：',
+    'en': 'Could not list models from the upstream (network or auth failure); enter a model id manually:',
+  },
+  modelManualPrompt: {
+    'zh-CN': '模型 id（留空跳过）',
+    'en': 'Model id (empty to skip)',
+  },
+  modelSkipped: {
+    'zh-CN': '未选择模型，目录保持不变。',
+    'en': 'No model picked; the catalog is unchanged.',
+  },
+  modelCatalogWritten: {
+    'zh-CN': '✓ 模型 {model} 已写入 {profile} 的模型目录',
+    'en': '✓ Model {model} written into the {profile} catalog',
+  },
+  modelCatalogFailed: {
+    'zh-CN': '模型目录写入失败：{reason}',
+    'en': 'Writing the model catalog failed: {reason}',
+  },
+  kMenuPrompt: {
+    'zh-CN': '凭据管理 — 要更新哪一项？',
+    'en': 'Credential management — what to update?',
+  },
+  kMenuKey: {
+    'zh-CN': '更新 API Key',
+    'en': 'Update the API key',
+  },
+  kMenuBaseUrl: {
+    'zh-CN': '更新 Base URL（endpoint）',
+    'en': 'Update the base URL (endpoint)',
+  },
+  kMenuModel: {
+    'zh-CN': '从上游选择模型（curl 模型列表后选择）',
+    'en': 'Pick a model from the upstream listing',
+  },
+  kMenuAll: {
+    'zh-CN': '全部重配（Base URL → Key → 模型）',
+    'en': 'Reconfigure everything (base URL, key, model)',
+  },
   apiKeyPrompt: {
     'zh-CN': 'DeepSeek API Key（sk-…，输入不回显）：',
     'en': 'DeepSeek API key (sk-…, hidden input):',

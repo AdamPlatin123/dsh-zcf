@@ -61,9 +61,10 @@ dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
 | `l` | 管理已装插件：列出并按选择移除（默认 dzcf profile）。 |
 | `u` | 更新已装插件：多选刷新到 npm 最新版；非交互且不给 `--plugin` 时更新全部。 |
 | `c` | 高级集成；需要 `--profile` 与 `--with`。 |
-| `k` | 仅更新凭据（Key / Base URL）。 |
+| `k` | 凭据管理菜单：更新 Key、更新 Base URL、从上游 `GET /models` 列表选模型，或全部重配（端点、Key、模型）。 |
 | `-k, --key <key>` | API Key；跳过掩码输入。 |
 | `--base-url <url>` | 端点覆盖；必须是 http(s) 地址，否则退出码 1。 |
+| `--model <id>` | 将该模型 id 固定进 profile 的模型目录（交互流程还会列出上游 `GET /models` 结果供选择）。 |
 | `-m, --mode <mode>` | `tui`、`web` 或 `app`；跳过列表选择。 |
 | `-l, --lang <lang>` | 界面语言：`zh-CN`（默认）或 `en`。 |
 | `-y, --yes` | 对安装与写入确认一律视为同意。 |

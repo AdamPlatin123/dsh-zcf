@@ -18,7 +18,7 @@ import type { RunFn, RunResult } from './exec.ts'
 import { detectPackageManager, dshAvailable, installDshArgs, REGISTRY_OPTIONS } from './exec.ts'
 import { ensureHomeDirectory, maskKey, readCredentials, writeCredentials } from './credentials.ts'
 import { writeEnvFile } from './dotenv.ts'
-import { createProfile, installCapability, installPlugin, listProfileBundles, removePlugin } from './profile.ts'
+import { createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, removePlugin } from './profile.ts'
 
 /** Everything the wizard touches that an environment can provide. */
 export interface WizardContext {
@@ -32,6 +32,8 @@ export interface WizardContext {
   installDsh: (pm: string, args: readonly string[], onLine: (line: string) => void) => Promise<RunResult>
   /** Registry latency probe in milliseconds; undefined when unreachable. */
   probeRegistry: (url: string) => Promise<number | undefined>
+  /** Upstream `GET /models` listing; undefined when the endpoint does not answer. */
+  fetchModels: (baseUrl: string, key: string) => Promise<readonly string[] | undefined>
   /** Interactive prompt implementation. */
   prompt: PromptFn
   /** True when stdin and stdout are both a TTY. */
@@ -439,10 +441,12 @@ function initPlanLines(
   surface: Surface,
   profile: string,
   plugins: readonly RecommendedPlugin[],
+  model: string | undefined,
 ): string[] {
   const lines: string[] = [`surface: ${surface} (profile: ${profile})`]
   if (key !== undefined) lines.push(`${API_KEY_REF} = ${maskKey(key)}`)
   if (baseUrl !== '') lines.push(`${BASE_URL_REF} = ${baseUrl}`)
+  if (model !== undefined) lines.push(`model ${model} -> ${profile} catalog`)
   for (const plugin of plugins) lines.push(`plugin ${plugin.id}`)
   return lines
 }
@@ -462,11 +466,45 @@ function installPlugins(context: WizardContext, t: T, profile: string, plugins: 
 }
 
 /** Fully-collected init state after the step loop resolves. */
+/**
+ * Ask which upstream model to pin into the profile catalog. The listing is
+ * fetched live from the endpoint with the key; a failed fetch falls back to a
+ * manual id entry, and an empty answer leaves the catalog untouched.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param baseUrl - endpoint base; empty uses the public DeepSeek API.
+ * @param key - bearer credential for the listing.
+ * @returns the picked model id, or undefined when skipped.
+ */
+type ModelAnswer = { status: 'picked'; model: string } | { status: 'skipped' } | { status: 'cancelled' }
+
+async function askModel(context: WizardContext, t: T, baseUrl: string, key: string): Promise<ModelAnswer> {
+  const ids = await context.fetchModels(baseUrl, key)
+  if (ids !== undefined) {
+    const outcome = await askOne(context.prompt, {
+      type: 'list',
+      name: 'model',
+      message: t('modelPrompt'),
+      choices: [{ name: t('modelSkip'), value: '__SKIP__' }, ...ids.map(id => ({ name: id, value: id }))],
+    })
+    if (outcome.status === 'cancelled') return { status: 'cancelled' }
+    const picked = outcome.value.model
+    return typeof picked === 'string' && picked !== '__SKIP__' ? { status: 'picked', model: picked } : { status: 'skipped' }
+  }
+  context.out(t('modelFetchFailed'))
+  const outcome = await askOne(context.prompt, { type: 'input', name: 'modelManual', message: t('modelManualPrompt') })
+  if (outcome.status === 'cancelled') return { status: 'cancelled' }
+  const typed = typeof outcome.value.modelManual === 'string' ? outcome.value.modelManual.trim() : ''
+  return typed === '' ? { status: 'skipped' } : { status: 'picked', model: typed }
+}
+
 interface InitState {
   key: string
   baseUrl: string
   surface: Surface
   plugins: readonly RecommendedPlugin[]
+  /** Model id pinned into the profile catalog; undefined keeps the shipped catalog. */
+  model?: string
 }
 
 /**
@@ -507,6 +545,7 @@ async function collectInitState(context: WizardContext, t: T, options: DzcfOptio
         baseUrl,
         surface: options.mode,
         plugins: options.plugins.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined),
+        ...(options.model === undefined ? {} : { model: options.model }),
       },
     }
   }
@@ -515,10 +554,12 @@ async function collectInitState(context: WizardContext, t: T, options: DzcfOptio
   let baseUrl = options.baseUrl ?? stored[BASE_URL_REF] ?? ''
   let surface = options.mode
   let plugins = options.plugins.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined)
-  type InitStep = 'key' | 'baseUrl' | 'surface' | 'plugins' | 'proceed'
+  let model = options.model
+  type InitStep = 'baseUrl' | 'key' | 'model' | 'surface' | 'plugins' | 'proceed'
   const steps: readonly InitStep[] = [
-    ...(key === undefined ? ['key' as const] : []),
     'baseUrl' as const,
+    ...(key === undefined ? ['key' as const] : []),
+    ...(model === undefined ? ['model' as const] : []),
     ...(surface === undefined ? ['surface' as const] : []),
     ...(options.plugins.length === 0 ? ['plugins' as const] : []),
     ...(options.yes ? ([] as const) : ['proceed' as const]),
@@ -575,6 +616,12 @@ async function collectInitState(context: WizardContext, t: T, options: DzcfOptio
         baseUrl = typed
         break
       }
+      case 'model': {
+        const answer = await askModel(context, t, baseUrl, key ?? stored[API_KEY_REF] ?? '')
+        if (answer.status === 'cancelled') { steppedBack = true; break }
+        if (answer.status === 'picked') model = answer.model
+        break
+      }
       case 'surface': {
         const outcome = await askOne(context.prompt, {
           type: 'list',
@@ -614,7 +661,7 @@ async function collectInitState(context: WizardContext, t: T, options: DzcfOptio
       }
       case 'proceed': {
         const profile = options.profile ?? 'dzcf'
-        context.out(t('summary', { lines: initPlanLines(key, baseUrl, surface ?? 'tui', profile, plugins).map(line => `  - ${line}`).join('\n') }))
+        context.out(t('summary', { lines: initPlanLines(key, baseUrl, surface ?? 'tui', profile, plugins, model).map(line => `  - ${line}`).join('\n') }))
         const outcome = await askOne(context.prompt, { type: 'confirm', name: 'proceed', message: t('proceedConfirm'), default: true })
         if (outcome.status === 'cancelled') { steppedBack = true; break }
         if (outcome.value.proceed !== true) {
@@ -636,7 +683,7 @@ async function collectInitState(context: WizardContext, t: T, options: DzcfOptio
     context.err(key === undefined ? t('missingKey') : t('missingMode'))
     return { status: 'abort' }
   }
-  return { status: 'done', state: { key, baseUrl, surface, plugins } }
+  return { status: 'done', state: { key, baseUrl, surface, plugins, ...(model === undefined ? {} : { model }) } }
 }
 
 /** The full-init flow. */
@@ -653,7 +700,7 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
 
   if (options.dryRun) {
     out(t('dryRunNotice'))
-    for (const line of initPlanLines(key, baseUrl, surface, profile, plugins)) out(`  - ${line}`)
+    for (const line of initPlanLines(key, baseUrl, surface, profile, plugins, collected.state.model)) out(`  - ${line}`)
     return 0
   }
 
@@ -667,6 +714,15 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
   out(t('profileCreated', { profile }))
   if (!installPlugins(context, t, profile, plugins)) return 1
 
+  if (collected.state.model !== undefined) {
+    try {
+      await installModelCatalog(context.run, home, profile, collected.state.model, baseUrl)
+      out(t('modelCatalogWritten', { model: collected.state.model, profile }))
+    } catch (error) {
+      context.err(t('modelCatalogFailed', { reason: (error as Error).message }))
+      return 1
+    }
+  }
   const verify = context.run('dsh', ['--profile', profile, '--dump-config'])
   if (verify.status !== 0) {
     context.err(t('verifyFailed', { mode: profile, stderr: verify.stderr.trim() }))
@@ -871,17 +927,43 @@ async function runConfigure(context: WizardContext, t: T, options: DzcfOptions):
 
 /** The credentials-only flow, as a navigable key -> base URL -> confirm loop. */
 async function runCredentials(context: WizardContext, t: T, options: DzcfOptions): Promise<number> {
-  const { home, out, err } = context
-  let key = options.key
-  let baseUrl = options.baseUrl ?? ''
+  const { home, out, err, run } = context
+  let stored: Record<string, string> = {}
+  try {
+    stored = readCredentials(home)
+  } catch (error) {
+    err(t('credentialsReadFailed', { path: `${dshHomeDisplay(home)}/.credentials.yaml`, reason: (error as Error).message }))
+    return 1
+  }
+  let key = options.key ?? stored[API_KEY_REF]
+  let baseUrl = options.baseUrl ?? stored[BASE_URL_REF] ?? ''
+  let model: string | undefined = options.model
   if (context.interactive) {
     context.out(t('backHint'))
-    type CredentialStep = 'key' | 'baseUrl' | 'proceed'
-    const steps: readonly CredentialStep[] = [
-      ...(key === undefined ? ['key' as const] : []),
-      ...(options.baseUrl === undefined ? (['baseUrl'] as const) : ([] as const)),
-      ...(options.yes ? ([] as const) : (['proceed'] as const)),
-    ]
+    const menu = await askOne(context.prompt, {
+      type: 'list',
+      name: 'kmenu',
+      message: t('kMenuPrompt'),
+      choices: [
+        { name: t('kMenuKey'), value: 'key' },
+        { name: t('kMenuBaseUrl'), value: 'baseUrl' },
+        { name: t('kMenuModel'), value: 'model' },
+        { name: t('kMenuAll'), value: 'all' },
+      ],
+    })
+    if (menu.status === 'cancelled') {
+      out(t('cancelled'))
+      return 0
+    }
+    const scope = typeof menu.value.kmenu === 'string' ? menu.value.kmenu : 'all'
+    type CredentialStep = 'key' | 'baseUrl' | 'model' | 'proceed'
+    const scopeSteps: Readonly<Record<string, readonly CredentialStep[]>> = {
+      key: ['key', 'proceed'],
+      baseUrl: ['baseUrl', 'proceed'],
+      model: ['model', 'proceed'],
+      all: ['baseUrl', 'key', 'model', 'proceed'],
+    }
+    const steps: readonly CredentialStep[] = scopeSteps[scope] ?? scopeSteps.all ?? []
     let index = 0
     while (index < steps.length) {
       const step = steps[index]
@@ -916,8 +998,17 @@ async function runCredentials(context: WizardContext, t: T, options: DzcfOptions
           baseUrl = typed
           break
         }
+        case 'model': {
+          const answer = await askModel(context, t, baseUrl, key ?? '')
+          if (answer.status !== 'picked') {
+            out(t('modelSkipped'))
+            return 0
+          }
+          model = answer.model
+          break
+        }
         case 'proceed': {
-          out(t('summary', { lines: `  - ${API_KEY_REF} = ${maskKey(key ?? '')}` }))
+          out(t('summary', { lines: [`  - ${API_KEY_REF} = ${maskKey(key ?? '')}`, ...(model === undefined ? [] : [`  - model ${model}`])].join('\n') }))
           const outcome = await askOne(context.prompt, { type: 'confirm', name: 'proceed', message: t('proceedConfirm'), default: true })
           if (outcome.status === 'cancelled') { steppedBack = true; break }
           if (outcome.value.proceed !== true) {
@@ -936,12 +1027,31 @@ async function runCredentials(context: WizardContext, t: T, options: DzcfOptions
       }
     }
   } else {
-    if (key === undefined) {
+    if (key === undefined || key === '') {
       err(t('missingKey'))
       return 1
     }
     if (baseUrl !== '' && !isHttpUrl(baseUrl)) {
       err(t('badBaseUrl', { url: baseUrl }))
+      return 1
+    }
+  }
+  if (model !== undefined) {
+    const profile = options.profile ?? 'dzcf'
+    if (listProfileBundles(home, profile) === undefined) {
+      err(t('manageMissing', { profile }))
+      return 1
+    }
+    if (options.dryRun) {
+      out(t('dryRunNotice'))
+      out(`  - model ${model} -> ${profile} catalog`)
+      return 0
+    }
+    try {
+      await installModelCatalog(run, home, profile, model, baseUrl)
+      out(t('modelCatalogWritten', { model, profile }))
+    } catch (error) {
+      err(t('modelCatalogFailed', { reason: (error as Error).message }))
       return 1
     }
   }

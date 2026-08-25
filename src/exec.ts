@@ -147,3 +147,31 @@ export function installDshStreaming(pm: string, args: readonly string[], onLine:
     })
   })
 }
+
+/** How long the upstream model listing may take before counting as unreachable. */
+const MODELS_TIMEOUT_MS = 8000
+
+/**
+ * List model ids from an OpenAI-compatible `GET {baseUrl}/models` endpoint
+ * with the picked key; DeepSeek's public API is the default base.
+ * @param baseUrl - endpoint base; empty uses the public DeepSeek API.
+ * @param key - bearer credential for the listing.
+ * @returns model ids, or undefined when the endpoint does not answer in time.
+ */
+export async function fetchUpstreamModels(baseUrl: string, key: string): Promise<readonly string[] | undefined> {
+  const base = baseUrl === '' ? 'https://api.deepseek.com' : baseUrl
+  try {
+    const response = await fetch(`${base.replace(/\/$/, '')}/models`, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(MODELS_TIMEOUT_MS),
+    })
+    if (!response.ok) return undefined
+    const body: unknown = await response.json()
+    const data = (body as { data?: unknown }).data
+    if (!Array.isArray(data)) return undefined
+    const ids = data.map(entry => (entry as { id?: unknown }).id).filter((id): id is string => typeof id === 'string' && id !== '')
+    return ids.length === 0 ? undefined : ids
+  } catch {
+    return undefined
+  }
+}

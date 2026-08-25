@@ -89,11 +89,14 @@ afterEach(async () => {
   await Promise.all(tempHomes.splice(0).map(home => rm(home, { recursive: true, force: true })))
 })
 
+const NO_MODELS = async (): Promise<readonly string[] | undefined> => undefined
+
 const context = async (overrides: Partial<WizardContext> & { home: string }): Promise<WizardContext> => ({
   lang: 'zh-CN',
   run: scriptedRun().run,
   installDsh: scriptedInstall().installDsh,
   probeRegistry: NO_PROBE,
+  fetchModels: NO_MODELS,
   prompt: scriptedPrompt({}).prompt,
   interactive: false,
   out: () => {},
@@ -112,6 +115,7 @@ describe('runWizard — non-interactive init', () => {
       run,
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
+      fetchModels: NO_MODELS,
       prompt: vi.fn(),
       interactive: false,
       ...outputLines(lines),
@@ -175,6 +179,7 @@ describe('runWizard — non-interactive init', () => {
       run,
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
+      fetchModels: NO_MODELS,
       prompt: vi.fn(),
       interactive: false,
       ...outputLines(lines),
@@ -199,6 +204,7 @@ describe('runWizard — non-interactive init', () => {
       run,
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
+      fetchModels: NO_MODELS,
       prompt: vi.fn(),
       interactive: false,
       ...outputLines(lines),
@@ -280,6 +286,7 @@ describe('runWizard — integrations', () => {
       run,
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
+      fetchModels: NO_MODELS,
       prompt: vi.fn(),
       interactive: false,
       ...outputLines(lines),
@@ -293,7 +300,7 @@ describe('runWizard — interactive', () => {
   it('asks for key, surface, integrations, then confirms', async () => {
     const home = await tempHome()
     const { run } = scriptedRun()
-    const { prompt, asked } = scriptedPrompt({ key: 'sk-typed', baseUrl: '', mode: 'web', plugins: [], proceed: true })
+    const { prompt, asked } = scriptedPrompt({ key: 'sk-typed', baseUrl: '', mode: 'web', plugins: [], proceed: true, modelManual: '' })
     const lines: string[] = []
     const code = await runWizard({
       home,
@@ -301,18 +308,19 @@ describe('runWizard — interactive', () => {
       run,
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
+      fetchModels: NO_MODELS,
       prompt,
       interactive: true,
       ...outputLines(lines),
     }, { ...OPTIONS })
     expect(code).toBe(0)
-    expect(asked.map(question => question.type)).toEqual(['password', 'input', 'list', 'multiselect', 'confirm'])
+    expect(asked.map(question => question.type)).toEqual(['input', 'password', 'input', 'list', 'multiselect', 'confirm'])
     expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-typed' })
   })
 
   it('writes nothing when the user declines the summary', async () => {
     const home = await tempHome()
-    const { prompt } = scriptedPrompt({ key: 'sk-typed', baseUrl: '', mode: 'web', plugins: [], proceed: false })
+    const { prompt } = scriptedPrompt({ key: 'sk-typed', baseUrl: '', mode: 'web', plugins: [], proceed: false, modelManual: '' })
     const lines: string[] = []
     const code = await runWizard({
       home,
@@ -320,6 +328,7 @@ describe('runWizard — interactive', () => {
       run: scriptedRun().run,
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
+      fetchModels: NO_MODELS,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -339,6 +348,7 @@ describe('runWizard — interactive', () => {
       run: scriptedRun().run,
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
+      fetchModels: NO_MODELS,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -357,17 +367,18 @@ describe('runWizard — interactive', () => {
       if (question === undefined) return { status: 'cancelled' }
       asked.push(question)
       switch (question.name) {
-        case 'key': return { status: 'answered', value: { key: 'sk-typed' } }
+        case 'key': return baseUrlAskCount === 1
+          // Esc on the first key ask steps back to the endpoint step; the re-ask must carry the prior value as default.
+          ? { status: 'cancelled' }
+          : { status: 'answered', value: { key: 'sk-typed' } }
         case 'baseUrl': {
           baseUrlAskCount += 1
-          // First ask is answered; the re-ask (after Esc on the surface step) must carry the prior value as default.
           if (baseUrlAskCount === 1) return { status: 'answered', value: { baseUrl: 'https://relay.example.com' } }
           expect((question as { default?: string }).default).toBe('https://relay.example.com')
           return { status: 'answered', value: { baseUrl: 'https://relay.example.com' } }
         }
-        case 'mode': return baseUrlAskCount === 1
-          ? { status: 'cancelled' }
-          : { status: 'answered', value: { mode: 'web' } }
+        case 'modelManual': return { status: 'answered', value: { modelManual: '' } }
+        case 'mode': return { status: 'answered', value: { mode: 'web' } }
         case 'plugins': return { status: 'answered', value: { plugins: [] } }
         case 'proceed': return { status: 'answered', value: { proceed: true } }
         default: return { status: 'cancelled' }
@@ -380,6 +391,7 @@ describe('runWizard — interactive', () => {
       run: scriptedRun().run,
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
+      fetchModels: NO_MODELS,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -484,8 +496,7 @@ describe('runWizard — registry pick and install streaming', () => {
       baseUrl: '',
       mode: 'web',
       plugins: [],
-      proceed: true,
-    })
+      proceed: true, modelManual: '' })
     const latencies = new Map([
       ['https://registry.npmjs.org', 1200],
       ['https://registry.npmmirror.com', 90],
@@ -497,6 +508,7 @@ describe('runWizard — registry pick and install streaming', () => {
       run,
       installDsh,
       probeRegistry: async url => latencies.get(url),
+      fetchModels: NO_MODELS,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -520,8 +532,7 @@ describe('runWizard — registry pick and install streaming', () => {
       baseUrl: '',
       mode: 'web',
       plugins: [],
-      proceed: true,
-    })
+      proceed: true, modelManual: '' })
     const lines: string[] = []
     const code = await runWizard({
       home,
@@ -529,6 +540,7 @@ describe('runWizard — registry pick and install streaming', () => {
       run,
       installDsh,
       probeRegistry: NO_PROBE,
+      fetchModels: NO_MODELS,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -716,7 +728,7 @@ describe('runWizard — marketplace and manage', () => {
     const home = await tempHome()
     await ensureHomeDirectory(home)
     await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-primary-1234567890', DEEPSEEK_API_KEY_BAK: 'sk-backup-1234567890' })
-    const { prompt, asked } = scriptedPrompt({ keyChoice: 'DEEPSEEK_API_KEY_BAK', baseUrl: '', mode: 'web', plugins: [], proceed: true })
+    const { prompt, asked } = scriptedPrompt({ keyChoice: 'DEEPSEEK_API_KEY_BAK', baseUrl: '', mode: 'web', plugins: [], proceed: true, modelManual: '' })
     const { run } = scriptedRun()
     const lines: string[] = []
     const code = await runWizard(await context({ home, run, prompt, interactive: true, ...outputLines(lines) }), { ...OPTIONS })
@@ -725,6 +737,38 @@ describe('runWizard — marketplace and manage', () => {
     expect(keyQuestion?.choices?.map(choice => choice.value)).toEqual(['DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY_BAK', '__NEW__'])
     const document = readCredentials(home)
     expect(document.DEEPSEEK_API_KEY).toBe('sk-backup-1234567890')
+  })
+
+  it('pins --model into the profile catalog in a non-interactive run', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } } }))
+    const { run } = scriptedRun()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), {
+      ...OPTIONS, key: 'sk-test-1234', mode: 'web', model: 'deepseek-v4-pro',
+    })
+    expect(code).toBe(0)
+    const patch = await readFile(join(home, 'profiles', 'dzcf', 'cordis.patch.yml'), 'utf8')
+    expect(patch).toContain('id: zcf-model')
+    expect(patch).toContain('models:')
+    expect(patch).toContain('id: deepseek-v4-pro')
+    expect(lines.join('\n')).toContain('deepseek-v4-pro 已写入')
+  })
+
+  it('picks a model from the upstream listing in the interactive flow', async () => {
+    const home = await tempHome()
+    const { prompt } = scriptedPrompt({ keyChoice: '__NEW__', key: 'sk-typed-1234567890', baseUrl: '', model: 'deepseek-v4-flash', mode: 'web', plugins: [], proceed: true })
+    const { run } = scriptedRun()
+    const lines: string[] = []
+    const code = await runWizard(await context({
+      home, run, prompt, interactive: true, ...outputLines(lines),
+      fetchModels: async () => ['deepseek-v4-flash', 'deepseek-v4-pro'],
+    }), { ...OPTIONS })
+    expect(code).toBe(0)
+    const patch = await readFile(join(home, 'profiles', 'dzcf', 'cordis.patch.yml'), 'utf8')
+    expect(patch).toContain('id: deepseek-v4-flash')
+    expect(lines.join('\n')).toContain('deepseek-v4-flash 已写入')
   })
 
   it('fails loud when the update target profile is missing', async () => {

@@ -21,6 +21,9 @@ export interface DzcfOptions {
   action: DzcfAction
   /** Non-interactive API key (`--key sk-…`). */
   key?: string
+  /** Model id pinned into the profile catalog (`--model <id>`). */
+  model?: string
+
   /** Non-interactive endpoint override (`--base-url https://…`). */
   baseUrl?: string
   /** Non-interactive runtime surface (`--mode tui|web|app`). */
@@ -100,6 +103,7 @@ export function parseDzcfArgs(argv: readonly string[], version: string): DzcfOpt
     .allowExcessArguments(false)
     .option('-k, --key <key>', 'DeepSeek API key (non-interactive)')
     .option('--base-url <url>', 'API base URL override (non-interactive)')
+    .option('--model <id>', 'pin this model id into the profile catalog')
     .option('-m, --mode <mode>', 'runtime surface: tui, web, or app (non-interactive)')
     .option('-p, --profile <name>', 'custom profile name')
     .option('--with <list>', 'integration options: comma-separated ids (exa,perplexity,sqlite,terminal,lsp,codex,claude,mcp)')
@@ -124,6 +128,7 @@ export function parseDzcfArgs(argv: readonly string[], version: string): DzcfOpt
   const options = program.opts<{
     key?: string
     baseUrl?: string
+    model?: string
     mode?: string
     profile?: string
     with?: string
@@ -168,6 +173,7 @@ export function parseDzcfArgs(argv: readonly string[], version: string): DzcfOpt
     action,
     ...(options.key === undefined ? {} : { key: options.key }),
     ...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
+    ...(options.model === undefined ? {} : { model: options.model }),
     ...(mode === undefined ? {} : { mode }),
     ...(options.profile === undefined ? {} : { profile: options.profile }),
     with: withList,

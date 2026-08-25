@@ -67,10 +67,14 @@ function mergeRows(existing: unknown[], rows: readonly PatchRow[], disableRows: 
     }
   }
   for (const row of rows) {
-    if (index.has(row.id)) continue
     const config = row.config === undefined ? {} : { config: row.config }
     const name = row.name === undefined ? {} : { name: row.name }
-    next.push({ id: row.id, ...name, ...config })
+    const composed = { id: row.id, ...name, ...config }
+    // Upsert: a re-run with the same row id replaces the row (catalog updates)
+    // instead of being silently dropped as a duplicate.
+    const at = index.get(row.id)
+    if (at === undefined) next.push(composed)
+    else next[at] = composed
   }
   return next
 }
@@ -96,6 +100,38 @@ export async function installCapability(run: RunFn, home: string, profile: strin
   if (rows.length === 0 && disables.length === 0) return
   const merged = mergeRows(readPatchRows(home, profile), rows, disables)
   await writeFileAtomic(profilePatchPath(home, profile), yaml.dump(merged, { lineWidth: -1 }), { mode: 0o600, dirMode: 0o700 })
+}
+
+
+
+/** Row id the wizard's model-catalog write owns inside the profile patch layer. */
+const MODEL_ROW_ID = 'zcf-model'
+
+/**
+ * Write the picked upstream model into the profile's `llm-deepseek` catalog:
+ * one upsert patch row carrying the custom endpoint (when set) and a single
+ * `models` entry, so the choice surfaces in dsh's model picker. The plugin
+ * ships with the official distribution, so no package install is needed.
+ * @param run - command runner.
+ * @param home - resolved harness home.
+ * @param profile - profile name.
+ * @param picked - chosen model id from the upstream `/models` listing.
+ * @param baseUrl - custom endpoint base; omitted for the public API.
+ */
+export async function installModelCatalog(run: RunFn, home: string, profile: string, picked: string, baseUrl: string): Promise<void> {
+  await installCapability(run, home, profile, {
+    id: 'model-catalog',
+    label: { 'zh-CN': '模型目录', 'en': 'Model catalog' },
+    hint: { 'zh-CN': '', 'en': '' },
+    rows: [{
+      id: MODEL_ROW_ID,
+      name: '@deepseek-ai/dsh-llm-deepseek',
+      config: {
+        ...(baseUrl === '' ? {} : { baseURL: baseUrl }),
+        models: [{ id: picked, name: picked }],
+      },
+    }],
+  })
 }
 
 /**
