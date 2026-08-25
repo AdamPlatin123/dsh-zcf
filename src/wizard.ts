@@ -476,12 +476,22 @@ interface InitState {
  * cancels the run. Non-interactive runs keep the fallback/fail-loud path.
  */
 async function collectInitState(context: WizardContext, t: T, options: DzcfOptions): Promise<{ status: 'done'; state: InitState } | { status: 'cancelled' } | { status: 'abort' }> {
+  let stored: Record<string, string>
+  try {
+    stored = readCredentials(context.home)
+  } catch (error) {
+    context.err(t('credentialsReadFailed', { path: `${dshHomeDisplay(context.home)}/.credentials.yaml`, reason: (error as Error).message }))
+    return { status: 'abort' }
+  }
   if (!context.interactive) {
-    if (options.key === undefined) {
+    // A key already on disk satisfies the run: explicit --key wins, the
+    // stored document is the fallback, and only a machine with neither aborts.
+    const key = options.key ?? stored[API_KEY_REF]
+    if (key === undefined || key === '') {
       context.err(t('missingKey'))
       return { status: 'abort' }
     }
-    const baseUrl = options.baseUrl ?? ''
+    const baseUrl = options.baseUrl ?? stored[BASE_URL_REF] ?? ''
     if (baseUrl !== '' && !isHttpUrl(baseUrl)) {
       context.err(t('badBaseUrl', { url: baseUrl }))
       return { status: 'abort' }
@@ -493,7 +503,7 @@ async function collectInitState(context: WizardContext, t: T, options: DzcfOptio
     return {
       status: 'done',
       state: {
-        key: options.key,
+        key,
         baseUrl,
         surface: options.mode,
         plugins: options.plugins.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined),
@@ -502,7 +512,7 @@ async function collectInitState(context: WizardContext, t: T, options: DzcfOptio
   }
   context.out(t('backHint'))
   let key = options.key
-  let baseUrl = options.baseUrl ?? ''
+  let baseUrl = options.baseUrl ?? stored[BASE_URL_REF] ?? ''
   let surface = options.mode
   let plugins = options.plugins.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined)
   type InitStep = 'key' | 'baseUrl' | 'surface' | 'plugins' | 'proceed'
@@ -521,6 +531,24 @@ async function collectInitState(context: WizardContext, t: T, options: DzcfOptio
     let steppedBack = false
     switch (step) {
       case 'key': {
+        const credentialRefs = Object.keys(stored).filter(ref => stored[ref] !== '').sort((a, b) => (a === API_KEY_REF ? -1 : 0) - (b === API_KEY_REF ? -1 : 0))
+        if (credentialRefs.length > 0) {
+          const pick = await askOne(context.prompt, {
+            type: 'list',
+            name: 'keyChoice',
+            message: t('keyChoicePrompt'),
+            choices: [
+              ...credentialRefs.map(ref => ({ name: `${ref}（${maskKey(stored[ref] ?? '')}）`, value: ref })),
+              { name: t('credentialReenter'), value: '__NEW__' },
+            ],
+          })
+          if (pick.status === 'cancelled') { steppedBack = true; break }
+          const ref = pick.value.keyChoice
+          if (typeof ref === 'string' && ref !== '__NEW__') {
+            key = stored[ref]
+            break
+          }
+        }
         const outcome = await askOne(context.prompt, { type: 'password', name: 'key', message: t('apiKeyPrompt') })
         if (outcome.status === 'cancelled') { steppedBack = true; break }
         const typed = typeof outcome.value.key === 'string' ? outcome.value.key.trim() : ''

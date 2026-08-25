@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DzcfOptions } from '../src/args.ts'
-import { credentialsPath, readCredentials } from '../src/credentials.ts'
+import { credentialsPath, ensureHomeDirectory, readCredentials, writeCredentials } from '../src/credentials.ts'
 import { RECOMMENDED_PLUGINS } from '../src/marketplace.ts'
 import type { RunFn, RunResult } from '../src/exec.ts'
 import type { PromptOutcome, PromptQuestion } from '../src/ui.ts'
@@ -698,6 +698,33 @@ describe('runWizard — marketplace and manage', () => {
     })
     expect(code).toBe(0)
     expect(calls).not.toContainEqual({ command: 'npm', args: ['install', '--global', 'pnpm', '--no-audit', '--no-fund'] })
+  })
+
+  it('reuses the stored key in a non-interactive run without --key', async () => {
+    const home = await tempHome()
+    await ensureHomeDirectory(home)
+    await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-stored-1234567890' })
+    const { run, calls } = scriptedRun()
+    const code = await runWizard(await context({ home, run }), { ...OPTIONS, mode: 'web' })
+    expect(code).toBe(0)
+    expect(calls.length).toBeGreaterThan(0)
+    const document = readCredentials(home)
+    expect(document.DEEPSEEK_API_KEY).toBe('sk-stored-1234567890')
+  })
+
+  it('offers stored credentials as a pick list in the interactive key step', async () => {
+    const home = await tempHome()
+    await ensureHomeDirectory(home)
+    await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-primary-1234567890', DEEPSEEK_API_KEY_BAK: 'sk-backup-1234567890' })
+    const { prompt, asked } = scriptedPrompt({ keyChoice: 'DEEPSEEK_API_KEY_BAK', baseUrl: '', mode: 'web', plugins: [], proceed: true })
+    const { run } = scriptedRun()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, prompt, interactive: true, ...outputLines(lines) }), { ...OPTIONS })
+    expect(code).toBe(0)
+    const keyQuestion = asked.find(question => question.name === 'keyChoice') as { choices?: { value: string }[] } | undefined
+    expect(keyQuestion?.choices?.map(choice => choice.value)).toEqual(['DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY_BAK', '__NEW__'])
+    const document = readCredentials(home)
+    expect(document.DEEPSEEK_API_KEY).toBe('sk-backup-1234567890')
   })
 
   it('fails loud when the update target profile is missing', async () => {

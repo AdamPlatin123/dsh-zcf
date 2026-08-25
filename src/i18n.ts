@@ -115,6 +115,14 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '✓ dsh 安装完成',
     'en': '✓ dsh installed',
   },
+  keyChoicePrompt: {
+    'zh-CN': '选择要使用的凭据（已保存在本机）：',
+    'en': 'Pick a stored credential to use (saved on this machine):',
+  },
+  credentialReenter: {
+    'zh-CN': '重新输入一个新的 API Key',
+    'en': 'Enter a new API key instead',
+  },
   apiKeyPrompt: {
     'zh-CN': 'DeepSeek API Key（sk-…，输入不回显）：',
     'en': 'DeepSeek API key (sk-…, hidden input):',
