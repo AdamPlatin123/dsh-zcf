@@ -22,6 +22,7 @@ dsh-zcf（DeepSeek Zero-Config Flow）是 DeepSeek Harness 的一键配置向导
 ## 快速开始
 
 ```sh
+curl -fsSL https://raw.githubusercontent.com/AdamPlatin123/dsh-zcf/master/install.sh | bash   # 一键：缺 Node 22 时经 nvm 自动安装（无 sudo）+ 全局安装
 npx dsh-zcf            # interactive menu: init / plugin market / manage / advanced / credentials
 npx dsh-zcf i          # full init (same as the bare command)
 npx dsh-zcf n          # recommended-plugin market
