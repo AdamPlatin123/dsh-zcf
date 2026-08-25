@@ -51,6 +51,18 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '现在用 {pm} 全局安装 @deepseek-ai/dsh 吗？',
     'en': 'Install @deepseek-ai/dsh globally with {pm} now?',
   },
+  pnpmInstalling: {
+    'zh-CN': '正在安装 pnpm：{command}',
+    'en': 'Installing pnpm: {command}',
+  },
+  pnpmInstalled: {
+    'zh-CN': '✓ pnpm 安装完成',
+    'en': '✓ pnpm installed',
+  },
+  pnpmInstallFailed: {
+    'zh-CN': 'pnpm 安装失败：{stderr}',
+    'en': 'pnpm install failed: {stderr}',
+  },
   installSizeNotice: {
     'zh-CN': '@deepseek-ai/dsh 是完整发行版：60+ 个子包、数百个依赖。官方源安装约需 5–15 分钟，镜像源约 1–2 分钟；安装过程会实时输出进度。',
     'en': '@deepseek-ai/dsh is a full distribution: 60+ sub-packages and hundreds of dependencies. Expect roughly 5–15 minutes from the official registry, 1–2 minutes from a mirror; install progress streams live.',

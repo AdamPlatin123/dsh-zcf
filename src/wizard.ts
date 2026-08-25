@@ -128,6 +128,50 @@ async function pickRegistry(context: WizardContext, t: T, options: DzcfOptions):
   return { status: 'picked', registry: typeof outcome.value.registry === 'string' ? outcome.value.registry : undefined }
 }
 
+/** Whether `pnpm` answers on the PATH. */
+function pnpmAvailable(run: RunFn): boolean {
+  return run('pnpm', ['-v']).status === 0
+}
+
+/**
+ * Bring in pnpm when the harness would need it: `dsh plugin` is a pnpm
+ * passthrough, so a machine that just gained dsh through npm still cannot
+ * manage profile plugins until pnpm exists. Installs with the wizard's own
+ * package manager and `--registry` when given; a dry run only reports.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param options - resolved command-line options.
+ * @returns true when pnpm is (now) available.
+ */
+function ensurePnpm(context: WizardContext, t: T, options: DzcfOptions): boolean {
+  const { run, out, err } = context
+  if (pnpmAvailable(run)) return true
+  const pm = detectPackageManager(run)
+  if (pm === undefined) {
+    err(t('noPackageManager'))
+    return false
+  }
+  const registryArgs = options.registry === undefined ? [] : [`--registry=${options.registry}`]
+  const args = pm === 'pnpm'
+    ? ['add', '--global', 'pnpm', ...registryArgs]
+    : ['install', '--global', 'pnpm', '--no-audit', '--no-fund', ...registryArgs]
+  if (options.dryRun) {
+    out(t('dryRunNotice'))
+    out(`  - ${pm} ${args.join(' ')}`)
+    return true
+  }
+  // No separate confirmation: the user already agreed to the (much larger)
+  // dsh install, and pnpm is its runtime companion, not a new decision.
+  out(t('pnpmInstalling', { command: `${pm} ${args.join(' ')}` }))
+  const install = run(pm, args)
+  if (install.status !== 0 || !pnpmAvailable(run)) {
+    err(t('pnpmInstallFailed', { stderr: install.stderr.trim() }))
+    return false
+  }
+  out(t('pnpmInstalled'))
+  return true
+}
+
 /** Ensure `dsh` answers on the PATH, offering an install otherwise. */
 async function ensureDsh(context: WizardContext, t: T, options: DzcfOptions): Promise<boolean> {
   const { run, interactive, prompt, out, err } = context
@@ -571,6 +615,7 @@ async function collectInitState(context: WizardContext, t: T, options: DzcfOptio
 async function runInit(context: WizardContext, t: T, options: DzcfOptions): Promise<number> {
   const { home, out } = context
   if (!await ensureDsh(context, t, options)) return 1
+  if (!ensurePnpm(context, t, options)) return 1
 
   const collected = await collectInitState(context, t, options)
   if (collected.status === 'abort') return 1
@@ -608,6 +653,8 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
 
 /** The marketplace flow: browse the curated picks and install into a profile. */
 async function runMarketplace(context: WizardContext, t: T, options: DzcfOptions): Promise<number> {
+  if (!ensurePnpm(context, t, options)) return 1
+
   const { run, out, err, home } = context
   out(t('marketplaceSource'))
   const profile = options.profile ?? 'dzcf'

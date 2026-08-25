@@ -224,7 +224,7 @@ describe('runWizard — non-interactive init', () => {
       calls.push({ command, args })
       if (command === 'dsh' && args[0] === '-V') return { status: dshInstalled ? 0 : null, stdout: '', stderr: 'not found' }
       if (command === 'dsh') return { status: 0, stdout: '# composed\n', stderr: '' }
-      if (command === 'pnpm' && args[0] === '-v') return { status: 0, stdout: '11.0.0\n', stderr: '' }
+      if (command === 'pnpm' && args[0] === '-v') return { status: 0, stdout: '10.18.0\n', stderr: '' }
       return { status: null, stdout: '', stderr: `command not found: ${command}` }
     }
     const { installDsh, calls: installCalls } = scriptedInstall()
@@ -416,6 +416,7 @@ describe('runWizard — registry pick and install streaming', () => {
   /** dsh missing on the PATH until the streaming installer runs; npm answers. */
   function dshMissingUntilInstall(): { run: RunFn; installDsh: WizardContext['installDsh']; calls: InstallCall[] } {
     let installed = false
+    let pnpmReady = false
     const run: RunFn = (command, args) => {
       if (command === 'dsh' && args[0] === '-V') {
         return installed
@@ -424,6 +425,9 @@ describe('runWizard — registry pick and install streaming', () => {
       }
       if (command === 'dsh') return { status: 0, stdout: '# composed\n', stderr: '' }
       if (command === 'npm' && args[0] === '-v') return { status: 0, stdout: '11.0.0\n', stderr: '' }
+      if (command === 'pnpm' && args[0] === '-v') return pnpmReady ? { status: 0, stdout: '10.18.0\n', stderr: '' } : { status: null, stdout: '', stderr: 'command not found: pnpm' }
+      if (command === 'npm' && args[0] === 'install') { pnpmReady = true; return { status: 0, stdout: '', stderr: '' } }
+      if (command === 'pnpm' && args[0] === '-v') return { status: 0, stdout: '10.18.0\n', stderr: '' }
       return { status: null, stdout: '', stderr: `command not found: ${command}` }
     }
     const scripted = scriptedInstall()
@@ -540,6 +544,7 @@ describe('runWizard — registry pick and install streaming', () => {
     const run: RunFn = (command, args) => {
       if (command === 'dsh' && args[0] === '-V') return { status: null, stdout: '', stderr: 'not found' }
       if (command === 'npm' && args[0] === '-v') return { status: 0, stdout: '11.0.0\n', stderr: '' }
+      if (command === 'pnpm' && args[0] === '-v') return { status: 0, stdout: '10.18.0\n', stderr: '' }
       return { status: null, stdout: '', stderr: `command not found: ${command}` }
     }
     const { installDsh } = scriptedInstall({ status: 1, stdout: '', stderr: 'network unreachable\n' })
@@ -667,6 +672,32 @@ describe('runWizard — marketplace and manage', () => {
     expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-lens'] })
     expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-spend'] })
     expect(lines.join('\n')).toContain('dsh-spend 已更新到最新版')
+  })
+
+  it('installs pnpm through npm when the machine only has npm', async () => {
+    const home = await tempHome()
+    let pnpmReady = false
+    const { run, calls } = scriptedRun({
+      pnpm: () => (pnpmReady ? { status: 0, stdout: '', stderr: '' } : { status: null, stdout: '', stderr: 'command not found: pnpm' }),
+      npm: () => { pnpmReady = true; return { status: 0, stdout: '', stderr: '' } },
+    })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'marketplace', plugins: ['dsh-lens'],
+    })
+    expect(code).toBe(0)
+    expect(calls).toContainEqual({ command: 'npm', args: ['install', '--global', 'pnpm', '--no-audit', '--no-fund'] })
+    expect(lines.join('\n')).toContain('pnpm 安装完成')
+  })
+
+  it('skips the pnpm step when pnpm already answers', async () => {
+    const home = await tempHome()
+    const { run, calls } = scriptedRun()
+    const code = await runWizard(await context({ home, run }), {
+      ...OPTIONS, action: 'marketplace', plugins: ['dsh-lens'],
+    })
+    expect(code).toBe(0)
+    expect(calls).not.toContainEqual({ command: 'npm', args: ['install', '--global', 'pnpm', '--no-audit', '--no-fund'] })
   })
 
   it('fails loud when the update target profile is missing', async () => {
