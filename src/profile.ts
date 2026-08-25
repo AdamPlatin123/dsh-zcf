@@ -23,8 +23,11 @@ import type { RunFn, RunResult } from './exec.ts'
  * profile directory carries `pnpm-workspace.yaml`, so an unflagged `pnpm add`
  * is rejected with `ERR_PNPM_ADDING_TO_ROOT`.
  */
+/** Milliseconds a profile pnpm operation may run before counting as hung. */
+const PLUGIN_TIMEOUT_MS = 180_000
+
 function pluginAdd(run: RunFn, profile: string, pkg: string): RunResult {
-  return run('dsh', ['plugin', '--profile', profile, 'add', '-w', pkg])
+  return run('dsh', ['plugin', '--profile', profile, 'add', '-w', pkg], undefined, PLUGIN_TIMEOUT_MS)
 }
 
 /**
@@ -51,7 +54,7 @@ export async function writeProfileNpmrc(home: string, profile: string, registry:
 
 /** Run `dsh plugin --profile <name> remove -w <pkg>`; nonzero fails the run. */
 function pluginRemove(run: RunFn, profile: string, pkg: string): RunResult {
-  return run('dsh', ['plugin', '--profile', profile, 'remove', '-w', pkg])
+  return run('dsh', ['plugin', '--profile', profile, 'remove', '-w', pkg], undefined, PLUGIN_TIMEOUT_MS)
 }
 
 /** Absolute path of a profile's user patch layer. */

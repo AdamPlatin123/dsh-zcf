@@ -17,7 +17,12 @@ export interface RunResult {
 }
 
 /** Synchronous command runner; `env` replaces inherited variables. */
-export type RunFn = (command: string, args: readonly string[], env?: Readonly<Record<string, string | undefined>>) => RunResult
+export type RunFn = (
+  command: string,
+  args: readonly string[],
+  env?: Readonly<Record<string, string | undefined>>,
+  timeoutMs?: number,
+) => RunResult
 
 /**
  * Run one command synchronously through the PATH, capturing output as UTF-8.
@@ -27,10 +32,18 @@ export type RunFn = (command: string, args: readonly string[], env?: Readonly<Re
  * @param env - optional environment override (merged over `process.env`).
  * @returns the run result.
  */
-export function runCommand(command: string, args: readonly string[], env?: Readonly<Record<string, string | undefined>>): RunResult {
+export function runCommand(
+  command: string,
+  args: readonly string[],
+  env?: Readonly<Record<string, string | undefined>>,
+  timeoutMs?: number,
+): RunResult {
   const result = spawnSync(command, [...args], {
     encoding: 'utf8',
     env: env === undefined ? process.env : { ...process.env, ...env },
+    // A hung pnpm (store-lock wait on a broken profile) must surface as a
+    // failed run the wizard can recover from, not an indefinite stall.
+    ...(timeoutMs === undefined ? {} : { timeout: timeoutMs }),
   })
   if (result.error !== undefined) {
     return { status: null, stdout: '', stderr: result.error.message }

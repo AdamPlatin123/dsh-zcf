@@ -151,6 +151,22 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '模型目录写入失败：{reason}',
     'en': 'Writing the model catalog failed: {reason}',
   },
+  profileRecoveryAsk: {
+    'zh-CN': 'profile 组装失败（可能残留损坏的安装状态）。删除并重建 {profile} 吗？（凭据不受影响；手动改过的 patch 配置会重置）',
+    'en': 'Profile composition failed (likely broken leftover install state). Remove and rebuild {profile}? (credentials unaffected; manual patch edits reset)',
+  },
+  profileRecovering: {
+    'zh-CN': '正在清除并重建 {profile}……',
+    'en': 'Clearing and rebuilding {profile}…',
+  },
+  profileRecovered: {
+    'zh-CN': '✓ {profile} 已重建',
+    'en': '✓ {profile} rebuilt',
+  },
+  profileBrokenHint: {
+    'zh-CN': 'profile 可能残留了上一次失败安装的损坏状态。可删除 {path} 后重跑本向导重建，或换一个 profile 名（--profile <名字>）。',
+    'en': 'The profile may hold a broken state from an earlier failed install. Remove {path} and rerun this wizard to rebuild it, or pick another profile name (--profile <name>).',
+  },
   npmrcWritten: {
     'zh-CN': '✓ 已为 {profile} 设置插件安装源：{registry}（写入 profile 的 .npmrc）',
     'en': '✓ Plugin registry for {profile} set to {registry} (profile .npmrc)',

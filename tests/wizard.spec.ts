@@ -844,6 +844,33 @@ describe('runWizard — marketplace and manage', () => {
     expect(npmrc).toContain('registry=https://registry.npmmirror.com')
   })
 
+  it('recovers a broken profile: wipes and rebuilds after a failed compose', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'pnpm-lock.yaml'), 'brokenness: [\n')
+    let dumpCalls = 0
+    const { prompt } = scriptedPrompt({ key: 'sk-typed-1234567890', baseUrl: '', modelManual: '', mode: 'web', plugins: [], proceed: true, rebuildProfile: true })
+    const run: RunFn = (command, args) => {
+      if (command === 'dsh' && args[0] === '-V') return { status: 0, stdout: '0.0.1-rc.4\n', stderr: '' }
+      if (command === 'dsh' && (args[2] === '--dump-default-config' || args[2] === '--dump-config')) {
+        dumpCalls += 1
+        return dumpCalls <= 1
+          ? { status: 1, stdout: '', stderr: 'dsh: pnpm failed in profile directory' }
+          : { status: 0, stdout: '# composed\n', stderr: '' }
+      }
+      if (command === 'dsh' && args[0] === 'plugin' && args.includes('add')) return { status: 0, stdout: '', stderr: '' }
+      if (command === 'pnpm' || command === 'npm') return { status: 0, stdout: '', stderr: '' }
+      return { status: null, stdout: '', stderr: `command not found: ${command}` }
+    }
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, prompt, interactive: true, ...outputLines(lines) }), {
+      ...OPTIONS, key: 'sk-test-1234', mode: 'web',
+    })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('正在清除并重建')
+    expect(lines.join('\n')).toContain('已重建')
+  })
+
   it('fails loud when the update target profile is missing', async () => {
     const home = await tempHome()
     const lines: string[] = []

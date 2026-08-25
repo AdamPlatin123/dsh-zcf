@@ -7,6 +7,8 @@
  * @module dsh-zcf
  */
 
+import { rm } from 'node:fs/promises'
+import { join } from 'node:path'
 import { dshHomeDisplay } from '@deepseek-ai/dsh-home-paths'
 import { renderBanner, renderMenuLines, type MenuAction } from './banner.ts'
 import { CAPABILITIES, capabilityOf, type Capability, type PatchRow, type Surface } from './capabilities.ts'
@@ -381,13 +383,16 @@ async function storeCredentials(context: WizardContext, t: T, home: string, key:
 }
 
 /** Create/install the integration plan into a custom profile and verify. */
-async function setupIntegrations(context: WizardContext, t: T, home: string, surface: Surface, plan: IntegrationPlan): Promise<boolean> {
+async function setupIntegrations(
+  context: WizardContext,
+  t: T,
+  home: string,
+  surface: Surface,
+  plan: IntegrationPlan,
+  options: DzcfOptions,
+): Promise<boolean> {
   const { run, out, err } = context
-  const create = createProfile(run, surface, plan.profile)
-  if (create.status !== 0) {
-    err(t('verifyFailed', { mode: plan.profile, stderr: create.stderr.trim() }))
-    return false
-  }
+  if (!await createProfileWithRecovery(context, t, options, surface, plan.profile)) return false
   out(t('profileCreated', { profile: plan.profile }))
 
   if (Object.keys(plan.envEntries).length > 0) {
@@ -495,6 +500,56 @@ async function ensureProfileRegistry(
   }
   await writeProfileNpmrc(context.home, profile, registry)
   out(t('npmrcWritten', { profile, registry }))
+}
+
+/**
+ * Create (or verify) a profile, and when the first attempt fails — typically
+ * a leftover broken pnpm state from an earlier interrupted install — offer to
+ * wipe the profile directory and rebuild it once. Interactive runs are asked
+ * (default yes); `--yes` recovers automatically; plain non-interactive runs
+ * keep the loud failure with the manual hint.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param options - resolved command-line options.
+ * @param surface - runtime surface for the profile.
+ * @param profile - profile name.
+ * @returns true when the profile composes.
+ */
+async function createProfileWithRecovery(
+  context: WizardContext,
+  t: T,
+  options: DzcfOptions,
+  surface: Surface,
+  profile: string,
+): Promise<boolean> {
+  const { run, out, err, home } = context
+  const fail = (result: RunResult): void => {
+    const detail = [result.stderr.trim(), result.stdout.trim()].filter(part => part !== '').join('\n')
+    err(t('verifyFailed', { mode: profile, stderr: detail }))
+    err(t('profileBrokenHint', { path: `${dshHomeDisplay(home)}/profiles/${profile}` }))
+  }
+  let create = createProfile(run, surface, profile)
+  if (create.status === 0) return true
+  if (!(context.interactive || options.yes)) {
+    fail(create)
+    return false
+  }
+  if (context.interactive && !options.yes) {
+    const outcome = await askOne(context.prompt, { type: 'confirm', name: 'rebuildProfile', message: t('profileRecoveryAsk', { profile }), default: true })
+    if (outcome.status === 'cancelled' || outcome.value.rebuildProfile !== true) {
+      fail(create)
+      return false
+    }
+  }
+  out(t('profileRecovering', { profile }))
+  await rm(join(home, 'profiles', profile), { recursive: true, force: true })
+  create = createProfile(run, surface, profile)
+  if (create.status !== 0) {
+    fail(create)
+    return false
+  }
+  out(t('profileRecovered', { profile }))
+  return true
 }
 
 /** Install recommended plugins into a profile; false on first failure. */
@@ -756,13 +811,12 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
 
   if (!await storeCredentials(context, t, home, key, baseUrl)) return 1
 
-  const create = createProfile(context.run, surface, profile)
-  if (create.status !== 0) {
-    context.err(t('verifyFailed', { mode: profile, stderr: create.stderr.trim() }))
-    return 1
-  }
+  // The registry decision must precede profile creation: the surface bundle
+  // install itself runs pnpm inside the profile and needs the mirror as much
+  // as the plugin installs do.
+  await ensureProfileRegistry(context, t, options, profile, plugins.length > 0 || listProfileBundles(home, profile) === undefined ? 1 : 0)
+  if (!await createProfileWithRecovery(context, t, options, surface, profile)) return 1
   out(t('profileCreated', { profile }))
-  await ensureProfileRegistry(context, t, options, profile, plugins.length)
   if (!installPlugins(context, t, profile, plugins)) return 1
 
   if (collected.state.model !== undefined) {
@@ -804,15 +858,11 @@ async function runMarketplace(context: WizardContext, t: T, options: DzcfOptions
     for (const plugin of plugins) out(`  - plugin ${plugin.id} -> ${profile}`)
     return 0
   }
+  await ensureProfileRegistry(context, t, options, profile, plugins.length)
   if (listProfileBundles(home, profile) === undefined) {
-    const create = createProfile(run, 'web', profile)
-    if (create.status !== 0) {
-      err(t('verifyFailed', { mode: profile, stderr: create.stderr.trim() }))
-      return 1
-    }
+    if (!await createProfileWithRecovery(context, t, options, 'web', profile)) return 1
     out(t('profileCreated', { profile }))
   }
-  await ensureProfileRegistry(context, t, options, profile, plugins.length)
   if (!installPlugins(context, t, profile, plugins)) return 1
   const verify = run('dsh', ['--profile', profile, '--dump-config'])
   if (verify.status !== 0) {
@@ -971,7 +1021,7 @@ async function runConfigure(context: WizardContext, t: T, options: DzcfOptions):
     return 0
   }
 
-  if (!await setupIntegrations(context, t, home, surface, plan)) return 1
+  if (!await setupIntegrations(context, t, home, surface, plan, options)) return 1
   out('')
   out(t('nextSteps', { command: nextStepsCommand(surface, plan.profile, t) }))
   return 0
