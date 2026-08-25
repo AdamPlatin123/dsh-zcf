@@ -771,6 +771,25 @@ describe('runWizard — marketplace and manage', () => {
     expect(lines.join('\n')).toContain('deepseek-v4-flash 已写入')
   })
 
+  it('runs the k-menu model scope: pick from the listing, write the catalog', async () => {
+    const home = await tempHome()
+    await ensureHomeDirectory(home)
+    await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-stored-1234567890' })
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } } }))
+    const { prompt } = scriptedPrompt({ kmenu: 'model', model: 'deepseek-v4-pro', proceed: true })
+    const { run } = scriptedRun()
+    const lines: string[] = []
+    const code = await runWizard(await context({
+      home, run, prompt, interactive: true, ...outputLines(lines),
+      fetchModels: async () => ['deepseek-v4-flash', 'deepseek-v4-pro'],
+    }), { ...OPTIONS, action: 'credentials' })
+    expect(code).toBe(0)
+    const patch = await readFile(join(home, 'profiles', 'dzcf', 'cordis.patch.yml'), 'utf8')
+    expect(patch).toContain('id: deepseek-v4-pro')
+    expect(lines.join('\n')).toContain('deepseek-v4-pro 已写入')
+  })
+
   it('fails loud when the update target profile is missing', async () => {
     const home = await tempHome()
     const lines: string[] = []

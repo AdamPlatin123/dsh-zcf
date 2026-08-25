@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import yaml from 'js-yaml'
 
 /**
  * End-to-end snapshot of the real dzcf entry (`node --import tsx/esm`): a
@@ -29,6 +30,30 @@ async function tempHome(): Promise<string> {
 }
 
 describe('dzcf non-interactive setup snapshot', () => {
+  it('writes the picked model as a single-document patch array the loader can parse', async () => {
+    await chmod(join(FIXTURES, 'dsh'), 0o755)
+    const home = await tempHome()
+    const result = spawnSync(process.execPath, ['--import', 'tsx/esm', BIN, 'i', '--key', 'sk-snapshot-1234567890', '--mode', 'web', '--model', 'deepseek-v4-pro', '--yes'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        DSH_HOME: home,
+        PATH: `${FIXTURES}${delimiter}${process.env.PATH ?? ''}`,
+      },
+    })
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('deepseek-v4-pro 已写入')
+    const patchText = await readFile(join(home, 'profiles', 'dzcf', 'cordis.patch.yml'), 'utf8')
+    // One parseable YAML document, as an array, carrying the catalog row —
+    // js-yaml's load rejects multi-document streams, so a passing parse plus
+    // the array check catches any regression handing the loader a bad overlay.
+    const rows = yaml.load(patchText)
+    expect(Array.isArray(rows)).toBe(true)
+    const row = (rows as { id?: string }[]).find(entry => entry.id === 'zcf-model')
+    expect(row).toBeDefined()
+  })
+
   it('installs nothing, stores the key, verifies through the shim, and prints next steps', async () => {
     await chmod(join(FIXTURES, 'dsh'), 0o755)
     const home = await tempHome()
