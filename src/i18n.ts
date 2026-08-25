@@ -151,6 +151,10 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '模型目录写入失败：{reason}',
     'en': 'Writing the model catalog failed: {reason}',
   },
+  buildsAllowlisted: {
+    'zh-CN': '检测到被拒构建脚本：{deps}。已加入 {plugin} 所在 profile 的白名单并重试……',
+    'en': 'Refused build scripts detected: {deps}. Added to the profile allowlist for {plugin} and retrying…',
+  },
   profileRecoveryAsk: {
     'zh-CN': 'profile 组装失败（可能残留损坏的安装状态）。删除并重建 {profile} 吗？（凭据不受影响；手动改过的 patch 配置会重置）',
     'en': 'Profile composition failed (likely broken leftover install state). Remove and rebuild {profile}? (credentials unaffected; manual patch edits reset)',

@@ -871,6 +871,34 @@ describe('runWizard — marketplace and manage', () => {
     expect(lines.join('\n')).toContain('已重建')
   })
 
+  it('self-heals refused build scripts: allowlists and retries the plugin', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } } }))
+    await writeFile(join(home, 'profiles', 'dzcf', 'pnpm-workspace.yaml'), 'packages:\n  - .\nnodeLinker: hoisted\n')
+    let lensCalls = 0
+    const run: RunFn = (command, args) => {
+      if (command === 'dsh' && args[0] === 'plugin' && args.includes('add') && args.includes('dsh-lens')) {
+        lensCalls += 1
+        return lensCalls === 1
+          ? { status: 1, stdout: '[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @ast-grep/cli@0.45.2\n', stderr: 'dsh: pnpm failed in profile directory' }
+          : { status: 0, stdout: '', stderr: '' }
+      }
+      if (command === 'dsh' && args[0] === '-V') return { status: 0, stdout: '0.0.1-rc.4\n', stderr: '' }
+      if (command === 'dsh' || command === 'pnpm' || command === 'npm') return { status: 0, stdout: '', stderr: '' }
+      return { status: null, stdout: '', stderr: `command not found: ${command}` }
+    }
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'marketplace', plugins: ['dsh-lens'],
+    })
+    expect(code).toBe(0)
+    const workspace = await readFile(join(home, 'profiles', 'dzcf', 'pnpm-workspace.yaml'), 'utf8')
+    expect(workspace).toContain('onlyBuiltDependencies:')
+    expect(workspace).toContain("'@ast-grep/cli'")
+    expect(lines.join('\n')).toContain('已加入')
+  })
+
   it('fails loud when the update target profile is missing', async () => {
     const home = await tempHome()
     const lines: string[] = []

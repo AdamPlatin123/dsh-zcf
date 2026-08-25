@@ -52,6 +52,38 @@ export async function writeProfileNpmrc(home: string, profile: string, registry:
   await writeFileAtomic(path, `${lines.join('\n')}\n`, { mode: 0o600, dirMode: 0o700 })
 }
 
+/**
+ * Build-script allowlist seed. pnpm 10 refuses to run dependency build
+ * scripts unless whitelisted (`ERR_PNPM_IGNORED_BUILDS` fails the whole
+ * `plugin add`), so the profile pre-approves the known set; anything else
+ * the wizard discovers in pnpm's failure output is appended at runtime.
+ */
+const PROFILE_BUILT_DEPENDENCIES: readonly string[] = ['@ast-grep/cli']
+
+/**
+ * Merge build-script approvals into the profile's `pnpm-workspace.yaml`.
+ * A missing file (older profiles) is created; an existing
+ * `onlyBuiltDependencies` list is unioned with the incoming names.
+ * @param home - resolved harness home.
+ * @param profile - profile name.
+ * @param extra - additional package names to approve, discovered at runtime.
+ */
+export async function allowProfileBuilds(home: string, profile: string, extra: readonly string[] = []): Promise<void> {
+  const path = join(home, 'profiles', profile, 'pnpm-workspace.yaml')
+  let doc: Record<string, unknown> = {}
+  try {
+    const parsed: unknown = yaml.load(readFileSync(path, 'utf8'))
+    if (parsed !== null && parsed !== undefined && typeof parsed === 'object') doc = parsed as Record<string, unknown>
+  } catch {
+    // unreadable or absent: rewrite from the template below
+  }
+  const existing = Array.isArray(doc.onlyBuiltDependencies) ? doc.onlyBuiltDependencies.filter((name): name is string => typeof name === 'string') : []
+  const merged = [...new Set([...existing, ...PROFILE_BUILT_DEPENDENCIES, ...extra])].sort()
+  if (merged.length === existing.length && extra.length === 0) return
+  doc.onlyBuiltDependencies = merged
+  await writeFileAtomic(path, `${yaml.dump(doc)}\n`, { mode: 0o600, dirMode: 0o700 })
+}
+
 /** Run `dsh plugin --profile <name> remove -w <pkg>`; nonzero fails the run. */
 function pluginRemove(run: RunFn, profile: string, pkg: string): RunResult {
   return run('dsh', ['plugin', '--profile', profile, 'remove', '-w', pkg], undefined, PLUGIN_TIMEOUT_MS)

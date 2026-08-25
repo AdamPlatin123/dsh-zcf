@@ -20,7 +20,7 @@ import type { RunFn, RunResult } from './exec.ts'
 import { detectPackageManager, dshAvailable, installDshArgs, REGISTRY_OPTIONS } from './exec.ts'
 import { ensureHomeDirectory, maskKey, readCredentials, writeCredentials } from './credentials.ts'
 import { writeEnvFile } from './dotenv.ts'
-import { createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, removePlugin, writeProfileNpmrc } from './profile.ts'
+import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, removePlugin, writeProfileNpmrc } from './profile.ts'
 
 /** Everything the wizard touches that an environment can provide. */
 export interface WizardContext {
@@ -548,22 +548,57 @@ async function createProfileWithRecovery(
     fail(create)
     return false
   }
+  await allowProfileBuilds(home, profile)
   out(t('profileRecovered', { profile }))
   return true
 }
 
+/**
+ * Parse package names out of pnpm's ignored-builds notice. The line reads
+ * `Ignored build scripts: @scope/pkg@1.2.3, plain-pkg@2.0.0`.
+ * @param text - captured pnpm output.
+ * @returns package names (without versions) worth approving.
+ */
+function parseIgnoredBuilds(text: string): readonly string[] {
+  const names: string[] = []
+  for (const match of text.matchAll(/Ignored build scripts?:[^\n]*\n?((?:[ \t@][^\n]*)*)/g)) {
+    const candidates = match[0].split(/[,\n]/).map(part => part.trim())
+    for (const candidate of candidates) {
+      const name = candidate.replace(/^Ignored build scripts?:/, '').trim().replace(/@[^@]+$/, '')
+      if (name !== '' && (/^@[a-z0-9-~][a-z0-9-._~]*\/[a-z0-9-._~]+$/i.test(name) || /^[a-z0-9-._~]+$/i.test(name))) names.push(name)
+    }
+  }
+  return [...new Set(names)]
+}
+
 /** Install recommended plugins into a profile; false on first failure. */
-function installPlugins(context: WizardContext, t: T, profile: string, plugins: readonly RecommendedPlugin[]): boolean {
+async function installPlugins(context: WizardContext, t: T, profile: string, plugins: readonly RecommendedPlugin[]): Promise<boolean> {
+  const { home } = context
   for (const plugin of plugins) {
     context.out(t('pluginInstalling', { plugin: plugin.id }))
-    const result = installPlugin(context.run, profile, plugin.id)
+    let result = installPlugin(context.run, profile, plugin.id)
     if (result.status !== 0) {
-      // The launcher folds pnpm's own failure into one line, while the real
-      // cause (peer conflicts, fetch errors) usually lands on captured
-      // stdout — surface the tail of both so the user can diagnose.
       const detail = [result.stderr.trim(), result.stdout.trim()].filter(part => part !== '').join('\n')
-      context.err(t('pluginInstallFailed', { plugin: plugin.id, stderr: detail }))
-      return false
+      // pnpm 10 refuses dependency build scripts unless whitelisted; the
+      // refused names ride along in the notice line, so approve them and
+      // retry once — the plugin itself usually installed fine.
+      const refused = parseIgnoredBuilds(detail)
+      if (refused.length > 0) {
+        try {
+          await allowProfileBuilds(home, profile, refused)
+          context.out(t('buildsAllowlisted', { deps: refused.join(', '), plugin: plugin.id }))
+          result = installPlugin(context.run, profile, plugin.id)
+        } catch {
+          // fall through to the loud failure below
+        }
+      }
+      if (result.status !== 0) {
+        // The launcher folds pnpm's own failure into one line, while the real
+        // cause (peer conflicts, fetch errors) usually lands on captured
+        // stdout — surface the tail of both so the user can diagnose.
+        context.err(t('pluginInstallFailed', { plugin: plugin.id, stderr: [result.stderr.trim(), result.stdout.trim()].filter(part => part !== '').join('\n') }))
+        return false
+      }
     }
     context.out(t('pluginInstalled', { plugin: plugin.id }))
   }
@@ -815,9 +850,10 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
   // install itself runs pnpm inside the profile and needs the mirror as much
   // as the plugin installs do.
   await ensureProfileRegistry(context, t, options, profile, plugins.length > 0 || listProfileBundles(home, profile) === undefined ? 1 : 0)
+  await allowProfileBuilds(home, profile)
   if (!await createProfileWithRecovery(context, t, options, surface, profile)) return 1
   out(t('profileCreated', { profile }))
-  if (!installPlugins(context, t, profile, plugins)) return 1
+  if (!await installPlugins(context, t, profile, plugins)) return 1
 
   if (collected.state.model !== undefined) {
     try {
@@ -859,11 +895,12 @@ async function runMarketplace(context: WizardContext, t: T, options: DzcfOptions
     return 0
   }
   await ensureProfileRegistry(context, t, options, profile, plugins.length)
+  await allowProfileBuilds(home, profile)
   if (listProfileBundles(home, profile) === undefined) {
     if (!await createProfileWithRecovery(context, t, options, 'web', profile)) return 1
     out(t('profileCreated', { profile }))
   }
-  if (!installPlugins(context, t, profile, plugins)) return 1
+  if (!await installPlugins(context, t, profile, plugins)) return 1
   const verify = run('dsh', ['--profile', profile, '--dump-config'])
   if (verify.status !== 0) {
     err(t('verifyFailed', { mode: profile, stderr: verify.stderr.trim() }))
