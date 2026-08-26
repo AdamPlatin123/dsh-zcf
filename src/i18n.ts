@@ -159,6 +159,18 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '模型目录写入失败：{reason}',
     'en': 'Writing the model catalog failed: {reason}',
   },
+  pluginsBatchInstalling: {
+    'zh-CN': '一次性批量安装 {count} 个插件（pnpm 并行下载，进度行实时显示）……',
+    'en': 'Batch-installing {count} plugins in one pnpm pass (parallel downloads, live progress lines)…',
+  },
+  pluginsBatchElapsed: {
+    'zh-CN': '批量安装耗时 {seconds} 秒',
+    'en': 'Batch install finished in {seconds}s',
+  },
+  pluginsBatchFellBack: {
+    'zh-CN': '批量安装未全部成功，转为逐个安装以定位问题……',
+    'en': 'The batch install did not fully succeed; falling back to per-plugin installs to locate the failure…',
+  },
   buildsAllowlisted: {
     'zh-CN': '检测到被拒构建脚本：{deps}。已加入 {plugin} 所在 profile 的白名单并重试……',
     'en': 'Refused build scripts detected: {deps}. Added to the profile allowlist for {plugin} and retrying…',
@@ -279,9 +291,37 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '✓ {mode} profile 组装成功',
     'en': '✓ {mode} profile composes',
   },
-  nextSteps: {
-    'zh-CN': '下一步：{command}',
-    'en': 'Next: {command}',
+  onboardingTitle: {
+    'zh-CN': '✓ 一切就绪！上手指引：',
+    'en': '✓ All set! Getting started:',
+  },
+  onboardingLaunchTui: {
+    'zh-CN': '启动终端 UI：`dsh --profile {profile}`（Claude Code 风格交互，直接提问即可）',
+    'en': 'Launch the terminal UI: `dsh --profile {profile}` (Claude Code-style chat; just ask)',
+  },
+  onboardingLaunchWeb: {
+    'zh-CN': '启动 Web 界面：`dsh web`，然后浏览器打开 http://127.0.0.1:3080',
+    'en': 'Launch the web UI: `dsh web`, then open http://127.0.0.1:3080',
+  },
+  onboardingLaunchApp: {
+    'zh-CN': '启动桌面壳：`dsh --profile {profile}`（按 dsh-desktop-app 的说明）',
+    'en': 'Launch the desktop shell: `dsh --profile {profile}` (per dsh-desktop-app instructions)',
+  },
+  onboardingFirstRun: {
+    'zh-CN': '首次启动直接对话即可；',
+    'en': 'First run: just start chatting;',
+  },
+  onboardingModel: {
+    'zh-CN': '已固定模型 {model}（在模型选择器中可见）。',
+    'en': 'model {model} is pinned (visible in the model picker).',
+  },
+  onboardingManage: {
+    'zh-CN': '日常管理随时 `npx dsh-zcf`：u 更新插件 / k 凭据与模型 / l 卸载插件 / n 逛插件市场。',
+    'en': 'Day-to-day, rerun `npx dsh-zcf` anytime: u update plugins / k credentials & model / l uninstall / n browse the market.',
+  },
+  onboardingDocs: {
+    'zh-CN': '文档与示例：https://github.com/AdamPlatin123/dsh-zcf',
+    'en': 'Docs & examples: https://github.com/AdamPlatin123/dsh-zcf',
   },
   noWrites: {
     'zh-CN': '（本次没有需要写入的变化，凭据已是最新）',

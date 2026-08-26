@@ -1,5 +1,5 @@
 /**
- * Recommended-plugin catalog for the dsh-zcf wizard: twenty-five entries from
+ * Recommended-plugin catalog for the dsh-zcf wizard: twenty-four entries from
  * the community radar (awesome-dsh-plugins), each passing both gates — the
  * radar's runtime-verified verdict and an npm package that actually exists —
  * spread across directions, all installable as plain npm packages — `dsh plugin add -w`
@@ -137,12 +137,6 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     category: 'messaging',
     label: { 'zh-CN': 'dsh-dingtalk 钉钉通知', 'en': 'dsh-dingtalk notifications' },
     hint: { 'zh-CN': '钉钉群机器人签名 webhook 通知，零运行时依赖', 'en': 'DingTalk group-robot notifications via signed webhook, zero runtime deps' },
-  },
-  {
-    id: 'dsh-artifact',
-    category: 'files',
-    label: { 'zh-CN': 'dsh-artifact 制品管理', 'en': 'dsh-artifact artifact management' },
-    hint: { 'zh-CN': '会话产物的组织与浏览', 'en': 'Organize and browse session artifacts' },
   },
   {
     id: 'dsh-plugin-audit',

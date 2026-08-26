@@ -27,7 +27,11 @@ exports[`dzcf non-interactive setup snapshot > installs nothing, stores the key,
 ✓ 已创建 profile：dzcf
 ✓ dzcf profile 组装成功
 
-下一步：dsh web  # http://127.0.0.1:3080
+✓ 一切就绪！上手指引：
+  1. 启动 Web 界面：\`dsh web\`，然后浏览器打开 http://127.0.0.1:3080
+  2. 首次启动直接对话即可；
+  3. 日常管理随时 \`npx dsh-zcf\`：u 更新插件 / k 凭据与模型 / l 卸载插件 / n 逛插件市场。
+  4. 文档与示例：https://github.com/AdamPlatin123/dsh-zcf
 ",
 }
 `;

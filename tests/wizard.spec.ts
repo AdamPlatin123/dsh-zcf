@@ -128,7 +128,7 @@ describe('runWizard — non-interactive init', () => {
     expect(calls).toContainEqual({ command: 'dsh', args: ['--profile', 'dzcf', '--dump-config'] })
     expect(lines.join('\n')).toContain('已找到 dsh 命令')
     expect(lines.join('\n')).toContain('dzcf profile 组装成功')
-    expect(lines.join('\n')).toContain('下一步：dsh web')
+    expect(lines.join('\n')).toContain('启动 Web 界面')
   })
 
   it('stores a base URL beside the key', async () => {
@@ -578,26 +578,29 @@ describe('runWizard — marketplace and manage', () => {
     const home = await tempHome()
     await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
     await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } } }))
-    const { run, calls } = scriptedRun()
+    const { run } = scriptedRun()
+    const scripted = scriptedInstall()
     const lines: string[] = []
-    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), {
+    const code = await runWizard(await context({ home, run, installDsh: scripted.installDsh, ...outputLines(lines) }), {
       ...OPTIONS, action: 'marketplace', plugins: ['dsh-lens', 'dsh-spend'], profile: 'dzcf',
     })
     expect(code).toBe(0)
-    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-lens'] })
-    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-spend'] })
+    // Two or more picks install as one batched launcher call.
+    expect(scripted.calls.filter(call => call.args.includes('add'))).toHaveLength(1)
+    expect(scripted.calls[0]?.args).toEqual(['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-lens', 'dsh-spend'])
     expect(lines.join('\n')).toContain('dsh-lens 已安装并登记')
+    expect(lines.join('\n')).toContain('批量安装')
   })
 
   it('creates the profile on the web surface when it does not exist', async () => {
     const home = await tempHome()
     const { run, calls } = scriptedRun()
     const code = await runWizard(await context({ home, run }), {
-      ...OPTIONS, action: 'marketplace', plugins: ['dsh-artifact'],
+      ...OPTIONS, action: 'marketplace', plugins: ['dsh-spend'],
     })
     expect(code).toBe(0)
     expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', '@deepseek-ai/dsh-web-app@^0.1.0-rc.6'] })
-    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-artifact'] })
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-spend'] })
   })
 
   it('lists registered bundles and removes the picked ones', async () => {
@@ -626,14 +629,18 @@ describe('runWizard — marketplace and manage', () => {
 
   it('expands the (All) sentinel into every catalog entry', async () => {
     const home = await tempHome()
-    const { run, calls } = scriptedRun()
+    const { run } = scriptedRun()
+    const scripted = scriptedInstall()
     const { prompt } = scriptedPrompt({ plugins: ['__ALL__'] })
-    const code = await runWizard(await context({ home, run, prompt, interactive: true }), {
+    const code = await runWizard(await context({ home, run, prompt, interactive: true, installDsh: scripted.installDsh }), {
       ...OPTIONS, action: 'marketplace', profile: 'dzcf',
     })
     expect(code).toBe(0)
-    const adds = calls.filter(call => call.command === 'dsh' && call.args.includes('add') && !call.args.at(-1)!.startsWith('@'))
-    expect(adds).toHaveLength(RECOMMENDED_PLUGINS.length)
+    // The whole catalog expands into exactly one batched launcher call whose
+    // argument tail carries every plugin id.
+    expect(scripted.calls.filter(call => call.args.includes('add'))).toHaveLength(1)
+    const batchCall = scripted.calls.find(call => call.args.includes('add'))
+    expect(batchCall?.args.filter(arg => RECOMMENDED_PLUGINS.some(plugin => plugin.id === arg))).toHaveLength(RECOMMENDED_PLUGINS.length)
   })
 
   it('updates only the picked plugins in a non-interactive update', async () => {
