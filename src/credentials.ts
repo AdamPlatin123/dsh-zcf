@@ -56,17 +56,33 @@ export function readCredentials(home: string): Record<string, string> {
   if (typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error(`dsh-zcf: credentials document ${path} must be a YAML mapping of reference to value`)
   }
+  // The document is shared across the harness ecosystem: other writers may
+  // keep metadata keys (e.g. a `version` marker) beside credential refs.
+  // Anything the wizard does not recognize is preserved verbatim instead of
+  // failing the whole document; only a structurally broken file fails loud.
   const entries: Record<string, string> = {}
   for (const [ref, value] of Object.entries(parsed as Record<string, unknown>)) {
-    if (!isValidRef(ref)) {
-      throw new Error(`dsh-zcf: credentials document ${path} has an invalid reference ${JSON.stringify(ref)}`)
-    }
-    if (typeof value !== 'string' || value.length === 0) {
-      throw new Error(`dsh-zcf: credentials document ${path} value for ${ref} must be a non-empty string`)
-    }
-    entries[ref] = value
+    if (isValidRef(ref) && typeof value === 'string' && value.length > 0) entries[ref] = value
   }
   return entries
+}
+
+/**
+ * Read the raw document mapping for a write-back, so unrecognized keys from
+ * other writers survive a wizard save untouched.
+ * @param home - resolved harness home.
+ * @returns the raw mapping, or an empty mapping when absent.
+ */
+function readRawDocument(home: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = yaml.load(readFileSync(credentialsPath(home), 'utf8'))
+    if (parsed !== null && parsed !== undefined && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    // fall through to an empty document; the strict read reports the failure
+  }
+  return {}
 }
 
 /**
@@ -88,8 +104,9 @@ export async function writeCredentials(home: string, entries: Readonly<Record<st
   }
   const path = credentialsPath(home)
   await withFileLock(path, async () => {
-    const current = readCredentials(home)
-    const next = { ...current, ...entries }
+    // Write back over the raw document so metadata keys the wizard does not
+    // own (a `version` marker from another writer, say) survive the save.
+    const next = { ...readRawDocument(home), ...entries }
     const rendered = yaml.dump(next, { lineWidth: -1 })
     await writeFileAtomic(path, rendered, { mode: 0o600, dirMode: 0o700 })
   })

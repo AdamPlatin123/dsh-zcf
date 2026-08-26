@@ -35,22 +35,25 @@ describe('readCredentials', () => {
     expect(() => readCredentials(home)).toThrow(credentialsPath(home))
   })
 
-  it('rejects a non-identifier reference', async () => {
+  it('skips entries it does not own instead of failing the shared document', async () => {
     const home = await tempHome()
-    await writeFile(credentialsPath(home), '"bad key": sk-x\n')
-    expect(() => readCredentials(home)).toThrow(/invalid reference/)
+    await writeFile(credentialsPath(home), 'version: 2\nDEEPSEEK_API_KEY: sk-x\n"bad key": sk-y\nDEEPSEEK_BASE_URL: 42\n')
+    expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-x' })
   })
 
-  it('rejects a non-string value', async () => {
+  it('preserves foreign metadata keys when writing back', async () => {
     const home = await tempHome()
-    await writeFile(credentialsPath(home), 'DEEPSEEK_API_KEY: 42\n')
-    expect(() => readCredentials(home)).toThrow(/non-empty string/)
+    await writeFile(credentialsPath(home), 'version: 2\nDEEPSEEK_API_KEY: sk-old\n')
+    await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-new-1234567890' })
+    const text = await readFile(credentialsPath(home), 'utf8')
+    expect(text).toContain('version: 2')
+    expect(readCredentials(home).DEEPSEEK_API_KEY).toBe('sk-new-1234567890')
   })
 
-  it('rejects an empty-string value', async () => {
+  it('still fails loud on a structurally broken document', async () => {
     const home = await tempHome()
-    await writeFile(credentialsPath(home), "DEEPSEEK_API_KEY: ''\n")
-    expect(() => readCredentials(home)).toThrow(/non-empty string/)
+    await writeFile(credentialsPath(home), 'not: [valid\n')
+    expect(() => readCredentials(home)).toThrow()
   })
 })
 
