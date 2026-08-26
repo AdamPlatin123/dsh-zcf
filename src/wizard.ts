@@ -68,6 +68,7 @@ function onboardingBlock(surface: Surface, profile: string, model: string | unde
       : t('onboardingLaunchApp', { profile })
   return [
     t('onboardingTitle'),
+    t('onboardingProfileBridge', { profile }),
     `  1. ${launch}`,
     `  2. ${t('onboardingFirstRun')}${model === undefined ? '' : ` ${t('onboardingModel', { model })}`}`,
     `  3. ${t('onboardingManage')}`,
@@ -478,6 +479,54 @@ async function storeCredentials(context: WizardContext, t: T, home: string, key:
   return true
 }
 
+/**
+ * Stored references that can act as an API key, primary first. The base URL
+ * is a credential but never a key — offering it in a key picker would store
+ * an endpoint where dsh expects a secret.
+ */
+function keyCredentialRefs(stored: Record<string, string>): string[] {
+  return Object.keys(stored)
+    .filter(ref => ref !== BASE_URL_REF && stored[ref] !== '')
+    .sort((a, b) => (a === API_KEY_REF ? -1 : 0) - (b === API_KEY_REF ? -1 : 0))
+}
+
+/** Sentinel picker value for "skip the stored credentials and type a new key". */
+const KEY_REENTER = '__NEW__'
+
+/**
+ * One key step shared by init and the credentials flow: offer the stored key
+ * credentials (masked, primary first) for picking, or take a typed key.
+ * `current` is the pre-loaded key (CLI flag or prior state) — Esc steps back
+ * around it, an empty typed answer with no current key aborts.
+ */
+async function askKeyCredential(
+  context: WizardContext,
+  t: T,
+  stored: Record<string, string>,
+  current: string | undefined,
+): Promise<{ status: 'done' | 'back' | 'abort'; key: string | undefined }> {
+  const credentialRefs = keyCredentialRefs(stored)
+  if (credentialRefs.length > 0) {
+    const pick = await askOne(context.prompt, {
+      type: 'list',
+      name: 'keyChoice',
+      message: t('keyChoicePrompt'),
+      choices: [
+        ...credentialRefs.map(ref => ({ name: `${ref}（${maskKey(stored[ref] ?? '')}）`, value: ref })),
+        { name: t('credentialReenter'), value: KEY_REENTER },
+      ],
+    })
+    if (pick.status === 'cancelled') return { status: 'back', key: current }
+    const ref = pick.value.keyChoice
+    if (typeof ref === 'string' && ref !== KEY_REENTER) return { status: 'done', key: stored[ref] }
+  }
+  const outcome = await askOne(context.prompt, { type: 'password', name: 'key', message: t('apiKeyPrompt') })
+  if (outcome.status === 'cancelled') return { status: 'back', key: current }
+  const typed = typeof outcome.value.key === 'string' ? outcome.value.key.trim() : ''
+  if (typed === '' && current === undefined) return { status: 'abort', key: undefined }
+  return { status: 'done', key: typed === '' ? current : typed }
+}
+
 /** Create/install the integration plan into a custom profile and verify. */
 async function setupIntegrations(
   context: WizardContext,
@@ -535,16 +584,21 @@ function planLines(key: string | undefined, baseUrl: string, plan: IntegrationPl
   return lines
 }
 
+/** Inputs to {@link initPlanLines}. */
+interface InitPlanInput {
+  key: string | undefined
+  baseUrl: string
+  surface: Surface
+  profile: string
+  plugins: readonly RecommendedPlugin[]
+  model: string | undefined
+  t: T
+}
+
 /** Lines describing what the init flow is about to do. */
-function initPlanLines(
-  key: string | undefined,
-  baseUrl: string,
-  surface: Surface,
-  profile: string,
-  plugins: readonly RecommendedPlugin[],
-  model: string | undefined,
-): string[] {
-  const lines: string[] = [`surface: ${surface} (profile: ${profile})`]
+function initPlanLines(input: InitPlanInput): string[] {
+  const { key, baseUrl, surface, profile, plugins, model, t } = input
+  const lines: string[] = [t('summarySurfaceLine', { surface, profile })]
   if (key !== undefined) lines.push(`${API_KEY_REF} = ${maskKey(key)}`)
   if (baseUrl !== '') lines.push(`${BASE_URL_REF} = ${baseUrl}`)
   if (model !== undefined) lines.push(`model ${model} -> ${profile} catalog`)
@@ -870,32 +924,13 @@ async function collectInitState(context: WizardContext, t: T, options: DzcfOptio
     let steppedBack = false
     switch (step) {
       case 'key': {
-        const credentialRefs = Object.keys(stored).filter(ref => stored[ref] !== '').sort((a, b) => (a === API_KEY_REF ? -1 : 0) - (b === API_KEY_REF ? -1 : 0))
-        if (credentialRefs.length > 0) {
-          const pick = await askOne(context.prompt, {
-            type: 'list',
-            name: 'keyChoice',
-            message: t('keyChoicePrompt'),
-            choices: [
-              ...credentialRefs.map(ref => ({ name: `${ref}（${maskKey(stored[ref] ?? '')}）`, value: ref })),
-              { name: t('credentialReenter'), value: '__NEW__' },
-            ],
-          })
-          if (pick.status === 'cancelled') { steppedBack = true; break }
-          const ref = pick.value.keyChoice
-          if (typeof ref === 'string' && ref !== '__NEW__') {
-            key = stored[ref]
-            break
-          }
-        }
-        const outcome = await askOne(context.prompt, { type: 'password', name: 'key', message: t('apiKeyPrompt') })
-        if (outcome.status === 'cancelled') { steppedBack = true; break }
-        const typed = typeof outcome.value.key === 'string' ? outcome.value.key.trim() : ''
-        if (typed === '' && key === undefined) {
+        const answer = await askKeyCredential(context, t, stored, key)
+        if (answer.status === 'abort') {
           context.err(t('missingKey'))
           return { status: 'abort' }
         }
-        if (typed !== '') key = typed
+        if (answer.status === 'back') { steppedBack = true; break }
+        key = answer.key
         break
       }
       case 'baseUrl': {
@@ -960,7 +995,7 @@ async function collectInitState(context: WizardContext, t: T, options: DzcfOptio
       }
       case 'proceed': {
         const profile = options.profile ?? 'dzcf'
-        context.out(t('summary', { lines: initPlanLines(key, baseUrl, surface ?? 'tui', profile, plugins, model).map(line => `  - ${line}`).join('\n') }))
+        context.out(t('summary', { lines: initPlanLines({ key, baseUrl, surface: surface ?? 'tui', profile, plugins, model, t }).map(line => `  - ${line}`).join('\n') }))
         const outcome = await askOne(context.prompt, { type: 'confirm', name: 'proceed', message: t('proceedConfirm'), default: true })
         if (outcome.status === 'cancelled') { steppedBack = true; break }
         if (outcome.value.proceed !== true) {
@@ -999,7 +1034,7 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
 
   if (options.dryRun) {
     out(t('dryRunNotice'))
-    for (const line of initPlanLines(key, baseUrl, surface, profile, plugins, collected.state.model)) out(`  - ${line}`)
+    for (const line of initPlanLines({ key, baseUrl, surface, profile, plugins, model: collected.state.model, t })) out(`  - ${line}`)
     return 0
   }
 
@@ -1083,6 +1118,10 @@ async function runManage(context: WizardContext, t: T, options: DzcfOptions): Pr
     out(t('manageEmpty'))
     return 0
   }
+  // Removal goes through the same `dsh plugin` pnpm passthrough as installs,
+  // so it needs the same pnpm guarantee (a wrong-major system pnpm would fail
+  // against the profile's store).
+  if (!ensurePnpm(context, t, options)) return 1
   out(t('manageListHeader'))
   for (const pkg of installed) out(`  - ${pkg}`)
 
@@ -1110,6 +1149,17 @@ async function runManage(context: WizardContext, t: T, options: DzcfOptions): Pr
     out(t('dryRunNotice'))
     for (const pkg of toRemove) out(`  - remove ${pkg}`)
     return 0
+  }
+  // Removal is the only destructive flow: unlike installs and updates, a
+  // mis-ticked multiselect here drops working configuration, so it gets one
+  // lightweight confirm (explicit --plugin/--yes args already speak for themselves).
+  if (context.interactive && !options.yes) {
+    out(t('manageRemoveSummary', { profile, lines: toRemove.map(pkg => `  - ${pkg}`).join('\n') }))
+    const outcome = await askOne(context.prompt, { type: 'confirm', name: 'removeConfirm', message: t('manageRemoveConfirm'), default: true })
+    if (outcome.status === 'cancelled' || outcome.value.removeConfirm !== true) {
+      out(t('cancelled'))
+      return 0
+    }
   }
   for (const pkg of toRemove) {
     out(t('pluginRemoving', { plugin: pkg }))
@@ -1140,6 +1190,9 @@ async function runUpdate(context: WizardContext, t: T, options: DzcfOptions): Pr
     out(t('manageEmpty'))
     return 0
   }
+  // Updates ride the same `dsh plugin add` passthrough as installs, so they
+  // need the same pnpm guarantee before touching the profile's store.
+  if (!ensurePnpm(context, t, options)) return 1
   out(t('manageListHeader'))
   for (const pkg of installed) out(`  - ${pkg}`)
 
@@ -1317,14 +1370,16 @@ async function runCredentials(context: WizardContext, t: T, options: DzcfOptions
       let steppedBack = false
       switch (step) {
         case 'key': {
-          const outcome = await askOne(context.prompt, { type: 'password', name: 'key', message: t('apiKeyPrompt') })
-          if (outcome.status === 'cancelled') { steppedBack = true; break }
-          const typed = typeof outcome.value.key === 'string' ? outcome.value.key.trim() : ''
-          if (typed === '' && key === undefined) {
+          // A CLI --key speaks for itself, exactly as in init: never shadow it
+          // with the picker or a retype.
+          if (options.key !== undefined) break
+          const answer = await askKeyCredential(context, t, stored, key)
+          if (answer.status === 'abort') {
             err(t('missingKey'))
             return 1
           }
-          if (typed !== '') key = typed
+          if (answer.status === 'back') { steppedBack = true; break }
+          key = answer.key
           break
         }
         case 'baseUrl': {

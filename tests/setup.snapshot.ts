@@ -38,6 +38,7 @@ describe('dzcf non-interactive setup snapshot', () => {
       encoding: 'utf8',
       env: {
         ...process.env,
+        FORCE_COLOR: '3', // the snapshot pins the truecolor banner; keep it independent of the caller's terminal
         DSH_HOME: home,
         PATH: `${FIXTURES}${delimiter}${process.env.PATH ?? ''}`,
       },
@@ -62,6 +63,7 @@ describe('dzcf non-interactive setup snapshot', () => {
       encoding: 'utf8',
       env: {
         ...process.env,
+        FORCE_COLOR: '3', // the snapshot pins the truecolor banner; keep it independent of the caller's terminal
         DSH_HOME: home,
         PATH: `${FIXTURES}${delimiter}${process.env.PATH ?? ''}`,
       },

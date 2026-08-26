@@ -263,6 +263,10 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '即将执行：\n{lines}',
     'en': 'About to run:\n{lines}',
   },
+  summarySurfaceLine: {
+    'zh-CN': '运行形态：{surface}（将保存为 profile：{profile}，之后 `dsh --profile {profile}` 即按此形态启动）',
+    'en': 'surface: {surface} (saved as the profile: {profile}; `dsh --profile {profile}` starts it later)',
+  },
   proceedConfirm: {
     'zh-CN': '继续吗？',
     'en': 'Proceed?',
@@ -298,6 +302,10 @@ export const MESSAGES: MessageTable = {
   onboardingTitle: {
     'zh-CN': '✓ 一切就绪！上手指引：',
     'en': '✓ All set! Getting started:',
+  },
+  onboardingProfileBridge: {
+    'zh-CN': '（本次选择的运行形态已保存为 profile：{profile}——下面的启动命令都基于它）',
+    'en': '(The surface you picked is saved as the profile: {profile} — the launch commands below all use it)',
   },
   onboardingLaunchTui: {
     'zh-CN': '启动终端 UI：`dsh --profile {profile}`（全局安装 dsh-zcf 后可简写 `dsh-tui`；直接提问即可）',
@@ -494,6 +502,14 @@ export const MESSAGES: MessageTable = {
   manageRemovePrompt: {
     'zh-CN': '选择要移除的插件（首项 (全部) 即全选；空格选择，回车确认；不选则保留全部）：',
     'en': 'Pick plugins to remove (first entry (All) selects all; space to pick, enter to confirm; none keeps everything):',
+  },
+  manageRemoveSummary: {
+    'zh-CN': '即将从 {profile} 移除：\n{lines}',
+    'en': 'About to remove from {profile}:\n{lines}',
+  },
+  manageRemoveConfirm: {
+    'zh-CN': '继续移除吗？（移除后需重新安装才能恢复）',
+    'en': 'Proceed with the removal? (a reinstall is needed to restore them)',
   },
   selectAll: {
     'zh-CN': '(全部)',

@@ -325,6 +325,10 @@ describe('runWizard — interactive', () => {
     expect(code).toBe(0)
     expect(asked.map(question => question.type)).toEqual(['input', 'password', 'input', 'list', 'multiselect', 'confirm', 'confirm', 'confirm'])
     expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-typed' })
+    // The summary and the onboarding both bridge the two names: the surface
+    // choice lands as a profile the user can start later.
+    expect(lines.join('\n')).toContain('保存为 profile：dzcf')
+    expect(lines.join('\n')).toContain('已保存为 profile：dzcf')
   })
 
   it('writes nothing when the user declines the summary', async () => {
@@ -422,6 +426,60 @@ describe('runWizard — credentials flow', () => {
     const code = await runWizard(await context({ home }), { ...OPTIONS, action: 'credentials', key: 'sk-cred-1' })
     expect(code).toBe(0)
     expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-cred-1' })
+  })
+
+  it('offers stored key credentials (never the base URL) in the interactive key update and uses the picked one', async () => {
+    const home = await tempHome()
+    await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-primary-0001', DEEPSEEK_BASE_URL: 'https://relay.example.com', OTHER_API_KEY: 'sk-other-0002' })
+    const { prompt, asked } = scriptedPrompt({ kmenu: 'key', keyChoice: 'OTHER_API_KEY', proceed: true })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, prompt, interactive: true, ...outputLines(lines) }), { ...OPTIONS, action: 'credentials' })
+    expect(code).toBe(0)
+    const keyChoice = asked.find(question => question.name === 'keyChoice')
+    expect(keyChoice?.choices?.map(choice => choice.value)).toEqual(['DEEPSEEK_API_KEY', 'OTHER_API_KEY', '__NEW__'])
+    // Masking is the only barrier between stored keys and the terminal.
+    for (const choice of keyChoice?.choices ?? []) {
+      expect(choice.name).not.toContain('sk-primary-0001')
+      expect(choice.name).not.toContain('sk-other-0002')
+    }
+    expect(keyChoice?.choices?.[0]?.name).toContain('sk-***0001')
+    expect(readCredentials(home)).toEqual({
+      DEEPSEEK_API_KEY: 'sk-other-0002',
+      DEEPSEEK_BASE_URL: 'https://relay.example.com',
+      OTHER_API_KEY: 'sk-other-0002',
+    })
+  })
+
+  it('cancels gently when Esc lands on the stored-credential pick, leaving credentials untouched', async () => {
+    const home = await tempHome()
+    await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-primary-0001' })
+    const { prompt, asked } = scriptedPrompt({ kmenu: 'key' })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, prompt, interactive: true, ...outputLines(lines) }), { ...OPTIONS, action: 'credentials' })
+    expect(code).toBe(0)
+    expect(asked.map(question => question.name)).toEqual(['kmenu', 'keyChoice', 'returnToMenu'])
+    expect(lines.join('\n')).toContain('已取消')
+    expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-primary-0001' })
+  })
+
+  it('never shadows a CLI --key with the interactive picker, same as init', async () => {
+    const home = await tempHome()
+    await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-stored-0001' })
+    const { prompt, asked } = scriptedPrompt({ kmenu: 'key', proceed: true })
+    const code = await runWizard(await context({ home, prompt, interactive: true }), { ...OPTIONS, action: 'credentials', key: 'sk-cli-0002' })
+    expect(code).toBe(0)
+    expect(asked.filter(question => question.name === 'keyChoice' || question.name === 'key')).toHaveLength(0)
+    expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-cli-0002' })
+  })
+
+  it('falls through to a typed key when the stored-credential pick chooses re-enter', async () => {
+    const home = await tempHome()
+    await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-primary-0001' })
+    const { prompt } = scriptedPrompt({ kmenu: 'key', keyChoice: '__NEW__', key: 'sk-fresh-0003', proceed: true })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, prompt, interactive: true, ...outputLines(lines) }), { ...OPTIONS, action: 'credentials' })
+    expect(code).toBe(0)
+    expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-fresh-0003' })
   })
 })
 
@@ -640,6 +698,69 @@ describe('runWizard — marketplace and manage', () => {
     expect(lines.join('\n')).toContain('profile 不存在')
   })
 
+  it('asks a confirm before interactive removals and keeps everything on decline', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-lens', 'dsh-spend'] } } }))
+    const { run, calls } = scriptedRun()
+    const { prompt, asked } = scriptedPrompt({ remove: ['dsh-lens'], removeConfirm: false })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, prompt, interactive: true, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'manage', profile: 'dzcf',
+    })
+    expect(code).toBe(0)
+    expect(asked.map(question => question.name)).toEqual(['remove', 'removeConfirm', 'returnToMenu'])
+    expect(lines.join('\n')).toContain('即将从 dzcf 移除')
+    expect(lines.join('\n')).toContain('已取消')
+    expect(calls.filter(call => call.args.includes('remove'))).toHaveLength(0)
+  })
+
+  it('removes the picked plugins after the interactive confirm is accepted', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-lens', 'dsh-spend'] } } }))
+    const { run, calls } = scriptedRun()
+    const { prompt, asked } = scriptedPrompt({ remove: ['dsh-lens'], removeConfirm: true })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, prompt, interactive: true, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'manage', profile: 'dzcf',
+    })
+    expect(code).toBe(0)
+    expect(asked.find(question => question.name === 'removeConfirm')?.message).toContain('继续移除吗')
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'remove', '-w', 'dsh-lens'] })
+    expect(calls).not.toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'remove', '-w', 'dsh-spend'] })
+  })
+
+  it('skips the interactive removal confirm when --yes is passed', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-lens'] } } }))
+    const { run, calls } = scriptedRun()
+    const { prompt, asked } = scriptedPrompt({ remove: ['dsh-lens'] })
+    const code = await runWizard(await context({ home, run, prompt, interactive: true }), {
+      ...OPTIONS, action: 'manage', profile: 'dzcf', yes: true,
+    })
+    expect(code).toBe(0)
+    expect(asked.filter(question => question.name === 'removeConfirm')).toHaveLength(0)
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'remove', '-w', 'dsh-lens'] })
+  })
+
+  it('prints the removal plan under --dry-run without the interactive confirm', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-lens'] } } }))
+    const { run, calls } = scriptedRun()
+    const { prompt, asked } = scriptedPrompt({ remove: ['dsh-lens'] })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, prompt, interactive: true, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'manage', profile: 'dzcf', dryRun: true,
+    })
+    expect(code).toBe(0)
+    expect(asked.filter(question => question.name === 'removeConfirm')).toHaveLength(0)
+    expect(lines.join('\n')).toContain('remove dsh-lens')
+    expect(calls.filter(call => call.args.includes('remove'))).toHaveLength(0)
+  })
+
   it('expands the (All) sentinel into every catalog entry', async () => {
     const home = await tempHome()
     const { run } = scriptedRun()
@@ -654,6 +775,34 @@ describe('runWizard — marketplace and manage', () => {
     expect(scripted.calls.filter(call => call.args.includes('add'))).toHaveLength(1)
     const batchCall = scripted.calls.find(call => call.args.includes('add'))
     expect(batchCall?.args.filter(arg => RECOMMENDED_PLUGINS.some(plugin => plugin.id === arg))).toHaveLength(RECOMMENDED_PLUGINS.length)
+  })
+
+  it('fails loud before any removal when no usable pnpm can be established', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-lens'] } } }))
+    // System pnpm answers with the wrong major and the private install never
+    // verifies, so the manage flow must refuse before touching the profile.
+    const privatePnpm = join(home, '.zcf', 'pnpm10', 'node_modules', '.bin', 'pnpm')
+    const { run, calls } = scriptedRun({ pnpm: () => ({ status: 0, stdout: '11.22.0\n', stderr: '' }), [privatePnpm]: () => ({ status: null, stdout: '', stderr: 'not found' }) })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), { ...OPTIONS, action: 'manage', plugins: ['dsh-lens'], profile: 'dzcf' })
+    expect(code).toBe(1)
+    expect(lines.join('\n')).toContain('pnpm 安装失败')
+    expect(calls).not.toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'remove', '-w', 'dsh-lens'] })
+  })
+
+  it('fails loud before any update when no usable pnpm can be established', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-lens'] } } }))
+    const privatePnpm = join(home, '.zcf', 'pnpm10', 'node_modules', '.bin', 'pnpm')
+    const { run, calls } = scriptedRun({ pnpm: () => ({ status: 0, stdout: '11.22.0\n', stderr: '' }), [privatePnpm]: () => ({ status: null, stdout: '', stderr: 'not found' }) })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), { ...OPTIONS, action: 'update', plugins: ['dsh-lens'], profile: 'dzcf' })
+    expect(code).toBe(1)
+    expect(lines.join('\n')).toContain('pnpm 安装失败')
+    expect(calls).not.toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-lens'] })
   })
 
   it('updates only the picked plugins in a non-interactive update', async () => {
@@ -688,7 +837,8 @@ describe('runWizard — marketplace and manage', () => {
     const lines: string[] = []
     const code = await runWizard(await context({ home, run, ...outputLines(lines) }), { ...OPTIONS, action: 'update', dryRun: true })
     expect(code).toBe(0)
-    expect(calls).toHaveLength(0)
+    // The pnpm-version probe is expected; no launcher (dsh) work may run.
+    expect(calls.filter(call => call.command === 'dsh')).toHaveLength(0)
     expect(lines.join('\n')).toContain('update dsh-lens -> latest')
   })
 
