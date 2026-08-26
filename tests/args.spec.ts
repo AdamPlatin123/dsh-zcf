@@ -21,7 +21,7 @@ function exitCode(argv: readonly string[]): number {
 
 describe('parseDzcfArgs', () => {
   it('defaults to the menu flow with no options', () => {
-    expect(parse([])).toEqual({ action: 'menu', with: [], plugins: [], lang: 'zh-CN', yes: false, dryRun: false })
+    expect(parse([])).toEqual({ action: 'menu', selfVersion: '0.0.1-rc.2', with: [], plugins: [], lang: 'zh-CN', yes: false, dryRun: false })
   })
 
   it('maps the positional actions', () => {
@@ -35,6 +35,7 @@ describe('parseDzcfArgs', () => {
     const options = parse(['i', '--key', 'sk-test', '--base-url', 'https://relay.example.com', '--mode', 'web', '--profile', 'my', '--with', 'exa,terminal', '--mcp-command', 'npx x', '--plugin', 'dsh-lens,dsh-spend', '--registry', 'https://registry.npmmirror.com', '--lang', 'en', '--yes', '--dry-run'])
     expect(options).toEqual({
       action: 'init',
+      selfVersion: '0.0.1-rc.2',
       key: 'sk-test',
       baseUrl: 'https://relay.example.com',
       mode: 'web',

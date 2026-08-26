@@ -58,8 +58,12 @@ interface IntegrationPlan {
 type T = (key: string, params?: Readonly<Record<string, string>>) => string
 
 /** The post-init onboarding block: launch, first run, daily management, docs. */
-function onboardingBlock(surface: Surface, profile: string, model: string | undefined, t: T): string {
-  const launch = surface === 'web' ? t('onboardingLaunchWeb') : surface === 'tui' ? t('onboardingLaunchTui', { profile }) : t('onboardingLaunchApp', { profile })
+function onboardingBlock(surface: Surface, profile: string, model: string | undefined, t: T, shortcutReady: boolean): string {
+  const launch = surface === 'web'
+    ? t('onboardingLaunchWeb')
+    : surface === 'tui'
+      ? (shortcutReady ? t('onboardingLaunchTuiShortcut') : t('onboardingLaunchTui', { profile }))
+      : t('onboardingLaunchApp', { profile })
   return [
     t('onboardingTitle'),
     `  1. ${launch}`,
@@ -67,6 +71,50 @@ function onboardingBlock(surface: Surface, profile: string, model: string | unde
     `  3. ${t('onboardingManage')}`,
     `  4. ${t('onboardingDocs')}`,
   ].join('\n')
+}
+
+/**
+ * Whether `dsh-tui` resolves to a real global launcher (an npx cache bin
+ * does not count — it disappears with the cache).
+ * @param run - command runner.
+ */
+function globalShortcutReady(run: RunFn): boolean {
+  const probe = run('bash', ['-lc', 'command -v dsh-tui || true'])
+  if (probe.status !== 0) return false
+  const found = probe.stdout.trim()
+  return found !== '' && !found.includes('_npx')
+}
+
+/**
+ * Make sure the `dsh-tui` command exists after a finished init: install this
+ * very package globally when the shortcut is missing (asked in interactive
+ * runs unless --yes, automatic under --yes, hinted in plain non-interactive
+ * runs). Failures are soft — everything else is already configured.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param options - resolved command-line options.
+ * @returns true when `dsh-tui` is (now) globally available.
+ */
+async function ensureGlobalShortcut(context: WizardContext, t: T, options: DzcfOptions): Promise<boolean> {
+  const { run, out } = context
+  if (globalShortcutReady(run)) return true
+  const args = ['install', '--global', `dsh-zcf@${options.selfVersion}`, ...(options.registry === undefined ? [] : [`--registry=${options.registry}`])]
+  if (options.dryRun) return false
+  if (context.interactive && !options.yes) {
+    const outcome = await askOne(context.prompt, { type: 'confirm', name: 'globalShortcut', message: t('globalShortcutAsk'), default: true })
+    if (outcome.status === 'cancelled' || outcome.value.globalShortcut !== true) return false
+  } else if (!context.interactive && !options.yes) {
+    out(t('globalShortcutHint', { command: `npm install -g dsh-zcf@${options.selfVersion}` }))
+    return false
+  }
+  out(t('globalShortcutInstalling'))
+  const install = run('npm', args)
+  if (install.status !== 0 || !globalShortcutReady(run)) {
+    out(t('globalShortcutHint', { command: `npm install -g dsh-zcf@${options.selfVersion}` }))
+    return false
+  }
+  out(t('globalShortcutReady'))
+  return true
 }
 
 async function askOne(prompt: PromptFn, question: PromptQuestion): Promise<PromptOutcome> {
@@ -946,7 +994,8 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
   out(t('verified', { mode: profile }))
 
   out('')
-  out(onboardingBlock(surface, profile, collected.state.model, t))
+  const shortcutReady = await ensureGlobalShortcut(context, t, options)
+  out(onboardingBlock(surface, profile, collected.state.model, t, shortcutReady))
   return 0
 }
 
@@ -1154,7 +1203,7 @@ async function runConfigure(context: WizardContext, t: T, options: DzcfOptions):
 
   if (!await setupIntegrations(context, t, home, surface, plan, options)) return 1
   out('')
-  out(onboardingBlock(surface, plan.profile, undefined, t))
+  out(onboardingBlock(surface, plan.profile, undefined, t, globalShortcutReady(context.run)))
   return 0
 }
 

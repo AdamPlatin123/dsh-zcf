@@ -21,6 +21,8 @@ export interface DzcfOptions {
   action: DzcfAction
   /** Non-interactive API key (`--key sk-…`). */
   key?: string
+  /** This wizard's own version, injected by the entry for self-installs. */
+  selfVersion: string
   /** Model id pinned into the profile catalog (`--model <id>`). */
   model?: string
 
@@ -172,6 +174,7 @@ export function parseDzcfArgs(argv: readonly string[], version: string): DzcfOpt
 
   return {
     action,
+    selfVersion: version,
     ...(options.key === undefined ? {} : { key: options.key }),
     ...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
     ...(options.model === undefined ? {} : { model: options.model }),

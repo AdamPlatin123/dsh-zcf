@@ -299,6 +299,26 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '启动终端 UI：`dsh --profile {profile}`（全局安装 dsh-zcf 后可简写 `dsh-tui`；直接提问即可）',
     'en': 'Launch the terminal UI: `dsh --profile {profile}` (shortens to `dsh-tui` after a global dsh-zcf install; just ask)',
   },
+  onboardingLaunchTuiShortcut: {
+    'zh-CN': '启动终端 UI：`dsh-tui`（已全局就绪；Claude Code 风格交互，直接提问即可）',
+    'en': 'Launch the terminal UI: `dsh-tui` (globally ready; Claude Code-style chat; just ask)',
+  },
+  globalShortcutAsk: {
+    'zh-CN': '把 dsh-tui 启动命令装到全局吗？（npm install -g dsh-zcf，之后任何位置输入 dsh-tui 即可启动）',
+    'en': 'Install the dsh-tui launcher globally? (npm install -g dsh-zcf; then dsh-tui works from anywhere)',
+  },
+  globalShortcutInstalling: {
+    'zh-CN': '正在全局安装 dsh-tui 启动命令……',
+    'en': 'Installing the dsh-tui launcher globally…',
+  },
+  globalShortcutReady: {
+    'zh-CN': '✓ dsh-tui 已全局就绪',
+    'en': '✓ dsh-tui is globally ready',
+  },
+  globalShortcutHint: {
+    'zh-CN': '提示：之后可运行 `{command}` 让 dsh-tui 命令全局可用。',
+    'en': 'Hint: run `{command}` later to make the dsh-tui command globally available.',
+  },
   launchTuiNotice: {
     'zh-CN': '正在从 {path} 的配置启动 dsh-tui……',
     'en': 'Starting dsh-tui from the configuration at {path}…',

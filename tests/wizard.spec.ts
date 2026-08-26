@@ -316,7 +316,7 @@ describe('runWizard — interactive', () => {
       ...outputLines(lines),
     }, { ...OPTIONS })
     expect(code).toBe(0)
-    expect(asked.map(question => question.type)).toEqual(['input', 'password', 'input', 'list', 'multiselect', 'confirm', 'confirm'])
+    expect(asked.map(question => question.type)).toEqual(['input', 'password', 'input', 'list', 'multiselect', 'confirm', 'confirm', 'confirm'])
     expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-typed' })
   })
 
@@ -936,6 +936,36 @@ describe('runWizard — marketplace and manage', () => {
     expect(lines.join('\n')).toContain('正在从')
     expect(lines.join('\n')).toContain(join('profiles', 'dzcf'))
     expect(code).not.toBe(0)
+  })
+
+  it('installs the global dsh-tui shortcut after a finished init', async () => {
+    const home = await tempHome()
+    let installed = false
+    const base = scriptedRun({
+      bash: (args) => {
+        if (args.at(-1) === 'command -v dsh-tui || true') {
+          return installed
+            ? { status: 0, stdout: '/usr/local/bin/dsh-tui\n', stderr: '' }
+            : { status: 0, stdout: '', stderr: '' }
+        }
+        return { status: 0, stdout: '', stderr: '' }
+      },
+      npm: (args) => {
+        if (args[0] === 'install' && args.includes('--global')) {
+          installed = true
+          return { status: 0, stdout: '', stderr: '' }
+        }
+        return { status: 0, stdout: '11.0.0\n', stderr: '' }
+      },
+    })
+    const { prompt } = scriptedPrompt({ key: 'sk-typed-1234567890', baseUrl: '', modelManual: '', mode: 'web', plugins: [], proceed: true, globalShortcut: true })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run: base.run, prompt, interactive: true, ...outputLines(lines) }), {
+      ...OPTIONS, key: 'sk-test-1234', mode: 'web', yes: false, selfVersion: '0.4.3',
+    })
+    expect(code).toBe(0)
+    expect(base.calls).toContainEqual({ command: 'npm', args: ['install', '--global', 'dsh-zcf@0.4.3'] })
+    expect(lines.join('\n')).toContain('dsh-tui 已全局就绪')
   })
 
   it('dsh-tui fails loud when the default profile is missing', async () => {
