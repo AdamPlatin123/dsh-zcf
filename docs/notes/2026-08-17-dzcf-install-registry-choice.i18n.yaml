@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-17-dzcf-install-registry-choice.md
+2026-08-17-dzcf-install-registry-choice.md: 68a29f0d1642d87e1ce3bdd4166b092ef6c859df
+2026-08-17-dzcf-install-registry-choice.zh.md: 8b121637c417ec11719a59c6612e4a1ea5b79cea

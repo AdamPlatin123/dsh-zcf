@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-17-dsh-zcf-plugin-market-and-surfaces.md
+2026-08-17-dsh-zcf-plugin-market-and-surfaces.md: 99527897504eaa3a4a3a1a86171b5043a9142803
+2026-08-17-dsh-zcf-plugin-market-and-surfaces.zh.md: 259f7b8d66d517adce7441e79cb0fa3cabb51488
