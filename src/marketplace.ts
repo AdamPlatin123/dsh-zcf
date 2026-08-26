@@ -1,6 +1,7 @@
 /**
- * Recommended-plugin catalog for the dsh-zcf wizard: twenty-four entries from
- * the community radar (awesome-dsh-plugins), each passing both gates — the
+ * Recommended-plugin catalog for the dsh-zcf wizard: twenty-three entries from
+ * the community radar (dsh-claude-move is deliberately absent: it registers
+ * the same import_claude tool as dsh-chat-import and the two cannot coexist) (awesome-dsh-plugins), each passing both gates — the
  * radar's runtime-verified verdict and an npm package that actually exists —
  * spread across directions, all installable as plain npm packages — `dsh plugin add -w`
  * registers the bundle and the loader expands it, so an entry needs no patch
@@ -173,12 +174,6 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     category: 'web',
     label: { 'zh-CN': 'modsearch 搜索桥', 'en': 'modsearch search bridge' },
     hint: { 'zh-CN': '纯文本 agent 的网页搜索桥：web/X 结构化 JSON 证据', 'en': 'Web-search bridge for text-only agents: structured JSON evidence from web/X' },
-  },
-  {
-    id: 'dsh-claude-move',
-    category: 'migration',
-    label: { 'zh-CN': 'dsh-claude-move Claude 迁移', 'en': 'dsh-claude-move Claude migration' },
-    hint: { 'zh-CN': '从 Claude Code 全保真迁移历史会话/记忆/技能/CLAUDE.md，可增量同步', 'en': 'Full-fidelity migration of Claude Code sessions/memories/skills/CLAUDE.md with incremental sync' },
   },
   {
     id: 'dsh-chat-import',

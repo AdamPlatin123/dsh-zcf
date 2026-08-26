@@ -1356,6 +1356,9 @@ async function pickAction(context: WizardContext, t: T, options: DzcfOptions): P
     { action: 'credentials', label: t('menuCredentials') },
     { action: 'exit', label: t('menuExit') },
   ]
+  // The direct launcher hands the terminal straight to the TUI; the wizard
+  // banner would only flash above its own screen.
+  if (options.action === 'tui') return options.action
   context.out(renderBanner())
   context.out('')
   if (options.action !== 'menu') return options.action

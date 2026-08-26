@@ -56,7 +56,7 @@ Nothing else is touched: no profile files are rewritten, no `cordis.yml` is gene
 | Option | Meaning |
 |---|---|
 | `i` | Full init (same as the bare command). |
-| `n` | Recommended-plugin market: multi-select from the 24 curated picks (default dzcf profile). |
+| `n` | Recommended-plugin market: multi-select from the 23 curated picks (default dzcf profile). |
 | `l` | Manage installed plugins: list and remove picked ones (default dzcf profile). |
 | `u` | Update installed plugins: multi-select refreshes picked entries to npm latest; non-interactive with no `--plugin` updates all. |
 | `tui` / `dsh-tui` | Launch the default profile's terminal UI directly (the `dsh-tui` bin works after a global install), announcing the config source first. |
@@ -76,7 +76,7 @@ Nothing else is touched: no profile files are rewritten, no `cordis.yml` is gene
 | `--dry-run` | Print the planned writes and verify command, touch nothing. |
 | `-V, --version` | Print the version and exit. |
 
-## Recommended plugins (24 curated picks)
+## Recommended plugins (23 curated picks)
 
 The `n` market and the init multiselect, all runtime-verified entries from the community radar [awesome-dsh-plugins](https://github.com/AdamPlatin123/awesome-dsh-plugins); more at [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin).
 
