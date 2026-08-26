@@ -1,5 +1,5 @@
 /**
- * Recommended-plugin catalog for the dsh-zcf wizard: twenty-three entries from
+ * Recommended-plugin catalog for the dsh-zcf wizard: twenty-two entries from
  * the community radar (dsh-claude-move is deliberately absent: it registers
  * the same import_claude tool as dsh-chat-import and the two cannot coexist) (awesome-dsh-plugins), each passing both gates — the
  * radar's runtime-verified verdict and an npm package that actually exists —
@@ -126,12 +126,6 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
     category: 'memory',
     label: { 'zh-CN': 'dsh-memento 跨会话记忆', 'en': 'dsh-memento cross-session memory' },
     hint: { 'zh-CN': '有界、审批门控的跨会话记忆，零依赖 SQLite', 'en': 'Bounded, approval-gated cross-session memory on zero-dependency SQLite' },
-  },
-  {
-    id: 'dsh-lark-bot',
-    category: 'messaging',
-    label: { 'zh-CN': 'dsh-lark-bot 飞书桥', 'en': 'dsh-lark-bot Feishu bridge' },
-    hint: { 'zh-CN': '飞书/Lark 桥：流式卡片、worktree 隔离、并行 scope', 'en': 'Feishu/Lark bridge with streaming cards, worktree isolation, parallel scopes' },
   },
   {
     id: 'dsh-dingtalk',

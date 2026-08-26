@@ -36,66 +36,66 @@ export function isValidRef(ref: string): boolean {
 }
 
 /**
- * Parse the credentials document. An absent file is an empty store; anything
- * else that is not a mapping of identifier keys to non-empty strings fails
- * loud, naming the file — the same rejections as the file-backed provider.
+ * Parse the credentials document. The current provider layout is versioned
+ * (`version: 1` with entries nested under `refs:`); the pre-release flat
+ * layout (bare reference → value at the top level) and the mixed state the
+ * wizard itself could leave behind (a `version` marker beside flat entries)
+ * are read too, so an upgrade never loses stored keys. Only a structurally
+ * broken file fails loud.
  * @param home - resolved harness home.
  * @returns the stored reference → value mapping.
  */
 export function readCredentials(home: string): Record<string, string> {
+  const raw = readParsedDocument(home)
+  const entries: Record<string, string> = {}
+  const refs = raw.refs
+  if (refs !== undefined && typeof refs === 'object' && !Array.isArray(refs)) {
+    for (const [ref, value] of Object.entries(refs as Record<string, unknown>)) {
+      if (isValidRef(ref) && typeof value === 'string' && value.length > 0) entries[ref] = value
+    }
+  }
+  // Flat entries (pre-release layout, or the mixed state after earlier
+  // wizard writes) count as credentials as well.
+  for (const [key, value] of Object.entries(raw.document)) {
+    if (key !== 'version' && key !== 'refs' && key !== 'records' && isValidRef(key) && typeof value === 'string' && value.length > 0) {
+      entries[key] = value
+    }
+  }
+  return entries
+}
+
+/** Parsed raw document plus the parsed `refs:` mapping, absent meaning none. */
+interface ParsedDocument {
+  document: Record<string, unknown>
+  refs: unknown
+}
+
+/** Parse and validate the raw document shape; absent files are empty. */
+function readParsedDocument(home: string): ParsedDocument {
   const path = credentialsPath(home)
   let text: string
   try {
     text = readFileSync(path, 'utf8')
   } catch (error) {
-    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return {}
+    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return { document: {}, refs: undefined }
     throw new Error(`dsh-zcf: cannot read credentials document ${path}: ${(error as Error).message}`)
   }
   const parsed: unknown = yaml.load(text)
-  if (parsed === undefined || parsed === null) return {}
+  if (parsed === undefined || parsed === null) return { document: {}, refs: undefined }
   if (typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error(`dsh-zcf: credentials document ${path} must be a YAML mapping of reference to value`)
   }
-  // The document is shared across the harness ecosystem: other writers may
-  // keep metadata keys (e.g. a `version` marker) beside credential refs.
-  // Anything the wizard does not recognize is preserved verbatim instead of
-  // failing the whole document; only a structurally broken file fails loud.
-  const entries: Record<string, string> = {}
-  for (const [ref, value] of Object.entries(parsed as Record<string, unknown>)) {
-    if (isValidRef(ref) && typeof value === 'string' && value.length > 0) entries[ref] = value
-  }
-  return entries
-}
-
-/**
- * Read the raw document mapping for a write-back, so unrecognized keys from
- * other writers survive a wizard save untouched.
- * @param home - resolved harness home.
- * @returns the raw mapping, or an empty mapping when absent.
- */
-function readRawDocument(home: string): Record<string, unknown> {
-  const path = credentialsPath(home)
-  let parsed: unknown
-  try {
-    parsed = yaml.load(readFileSync(path, 'utf8'))
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}
-    // Never write over a document the wizard cannot parse: fail the save so
-    // the user repairs the file by hand instead of losing what is in it.
-    throw new Error(`dsh-zcf: cannot parse credentials document ${path}: ${(error as Error).message}`)
-  }
-  if (parsed === undefined || parsed === null) return {}
-  if (typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`dsh-zcf: credentials document ${path} must be a YAML mapping of reference to value`)
-  }
-  return parsed as Record<string, unknown>
+  return { document: parsed as Record<string, unknown>, refs: (parsed as Record<string, unknown>).refs }
 }
 
 /**
  * Merge `entries` into the credentials document: re-read under the writer
  * lock (folding in concurrent writes), apply the entries, and commit
- * atomically with mode 0600 under an owner-only directory. Existing entries
- * the call does not touch survive verbatim.
+ * atomically with mode 0600 under an owner-only directory. The commit is
+ * always in the current provider layout — `version: 1` with everything
+ * under `refs:` — which also migrates flat or mixed files on save; a
+ * `records:` section and any foreign top-level keys survive verbatim, and an
+ * unparseable document refuses the write instead of being overwritten.
  * @param home - resolved harness home.
  * @param entries - reference → value entries to store.
  */
@@ -110,9 +110,31 @@ export async function writeCredentials(home: string, entries: Readonly<Record<st
   }
   const path = credentialsPath(home)
   await withFileLock(path, async () => {
-    // Write back over the raw document so metadata keys the wizard does not
-    // own (a `version` marker from another writer, say) survive the save.
-    const next = { ...readRawDocument(home), ...entries }
+    const raw = readParsedDocument(home)
+    // Normalize every readable credential (versioned refs plus stray flat
+    // entries) into the versioned layout.
+    const merged: Record<string, string> = {}
+    const refs = raw.refs
+    if (refs !== undefined && typeof refs === 'object' && !Array.isArray(refs)) {
+      for (const [ref, value] of Object.entries(refs as Record<string, unknown>)) {
+        if (isValidRef(ref) && typeof value === 'string' && value.length > 0) merged[ref] = value
+      }
+    }
+    for (const [key, value] of Object.entries(raw.document)) {
+      if (key !== 'version' && key !== 'refs' && key !== 'records' && isValidRef(key) && typeof value === 'string' && value.length > 0) {
+        merged[key] = value
+      }
+    }
+    Object.assign(merged, entries)
+    const next: Record<string, unknown> = { version: 1, refs: merged }
+    if (raw.document.records !== undefined) next.records = raw.document.records
+    // Foreign top-level keys the wizard does not understand are preserved
+    // verbatim rather than silently dropped.
+    for (const [key, value] of Object.entries(raw.document)) {
+      if (key !== 'version' && key !== 'refs' && key !== 'records' && !(isValidRef(key) && typeof value === 'string' && value.length > 0)) {
+        next[key] = value
+      }
+    }
     const rendered = yaml.dump(next, { lineWidth: -1 })
     await writeFileAtomic(path, rendered, { mode: 0o600, dirMode: 0o700 })
   })

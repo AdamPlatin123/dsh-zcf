@@ -41,13 +41,23 @@ describe('readCredentials', () => {
     expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-x' })
   })
 
-  it('preserves foreign metadata keys when writing back', async () => {
+  it('migrates a mixed flat file into the versioned layout on save', async () => {
     const home = await tempHome()
-    await writeFile(credentialsPath(home), 'version: 2\nDEEPSEEK_API_KEY: sk-old\n')
+    await writeFile(credentialsPath(home), 'version: 1\nDEEPSEEK_API_KEY: sk-old\n')
     await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-new-1234567890' })
-    const text = await readFile(credentialsPath(home), 'utf8')
-    expect(text).toContain('version: 2')
-    expect(readCredentials(home).DEEPSEEK_API_KEY).toBe('sk-new-1234567890')
+    const document = yaml.load(await readFile(credentialsPath(home), 'utf8')) as { version?: number; refs?: Record<string, string> }
+    expect(document.version).toBe(1)
+    expect(document.refs?.DEEPSEEK_API_KEY).toBe('sk-new-1234567890')
+  })
+
+  it('reads the versioned layout and keeps a records section through a save', async () => {
+    const home = await tempHome()
+    await writeFile(credentialsPath(home), 'version: 1\nrefs:\n  DEEPSEEK_API_KEY: sk-v1\nrecords:\n  note: keep-me\n')
+    expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-v1' })
+    await writeCredentials(home, { DEEPSEEK_BASE_URL: 'https://relay.example.com' })
+    const document = yaml.load(await readFile(credentialsPath(home), 'utf8')) as { refs?: Record<string, string>; records?: unknown }
+    expect(document.refs).toEqual({ DEEPSEEK_API_KEY: 'sk-v1', DEEPSEEK_BASE_URL: 'https://relay.example.com' })
+    expect(document.records).toEqual({ note: 'keep-me' })
   })
 
   it('still fails loud on a structurally broken document', async () => {
@@ -81,7 +91,7 @@ describe('writeCredentials', () => {
     const home = await tempHome()
     await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-deepseek', DEEPSEEK_BASE_URL: 'https://relay.example.com' })
     const document = await readFile(credentialsPath(home), 'utf8')
-    expect(yaml.load(document)).toEqual({ DEEPSEEK_API_KEY: 'sk-deepseek', DEEPSEEK_BASE_URL: 'https://relay.example.com' })
+    expect(yaml.load(document)).toEqual({ version: 1, refs: { DEEPSEEK_API_KEY: 'sk-deepseek', DEEPSEEK_BASE_URL: 'https://relay.example.com' } })
   })
 
   it('refuses an invalid reference before touching the file', async () => {

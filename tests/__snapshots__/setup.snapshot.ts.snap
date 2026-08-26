@@ -2,7 +2,9 @@
 
 exports[`dzcf non-interactive setup snapshot > installs nothing, stores the key, verifies through the shim, and prints next steps 1`] = `
 {
-  "document": "DEEPSEEK_API_KEY: sk-snapshot-1234567890
+  "document": "version: 1
+refs:
+  DEEPSEEK_API_KEY: sk-snapshot-1234567890
 ",
   "fileMode": "384",
   "status": 0,
@@ -21,7 +23,7 @@ exports[`dzcf non-interactive setup snapshot > installs nothing, stores the key,
 [38;2;77;107;254m[1m║   Zero-Config Code Flow for DeepSeek Harness                           ║[22m[39m
 [38;2;77;107;254m[1m║                                                                        ║[22m[39m
 [38;2;77;107;254m[1m╚════════════════════════════════════════════════════════════════════════╝[22m[39m
-dsh-zcf v0.4.7（新版见 https://www.npmjs.com/package/dsh-zcf）
+dsh-zcf v0.4.8（新版见 https://www.npmjs.com/package/dsh-zcf）
 
 ✓ 已找到 dsh 命令
 ✓ 凭据已写入 $DSH_HOME/.credentials.yaml（0600）：DEEPSEEK_API_KEY
