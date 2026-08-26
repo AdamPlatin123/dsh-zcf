@@ -1360,6 +1360,7 @@ async function pickAction(context: WizardContext, t: T, options: DzcfOptions): P
   // banner would only flash above its own screen.
   if (options.action === 'tui') return options.action
   context.out(renderBanner())
+  context.out(t('versionLine', { version: options.selfVersion }))
   context.out('')
   if (options.action !== 'menu') return options.action
   if (!context.interactive) {

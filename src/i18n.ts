@@ -291,6 +291,10 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '✓ {mode} profile 组装成功',
     'en': '✓ {mode} profile composes',
   },
+  versionLine: {
+    'zh-CN': 'dsh-zcf v{version}（新版见 https://www.npmjs.com/package/dsh-zcf）',
+    'en': 'dsh-zcf v{version} (see https://www.npmjs.com/package/dsh-zcf for newer releases)',
+  },
   onboardingTitle: {
     'zh-CN': '✓ 一切就绪！上手指引：',
     'en': '✓ All set! Getting started:',
