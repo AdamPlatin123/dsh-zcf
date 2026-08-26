@@ -60,6 +60,7 @@ dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
 | `n` | 推荐插件市场：多选安装 24 个精选插件（默认 dzcf profile）。 |
 | `l` | 管理已装插件：列出并按选择移除（默认 dzcf profile）。 |
 | `u` | 更新已装插件：多选刷新到 npm 最新版；非交互且不给 `--plugin` 时更新全部。 |
+| `tui` / `dsh-tui` | 直接启动默认 profile 的终端 UI（全局安装后 `dsh-tui` 命令可用），启动前显示配置来源。 |
 | `c` | 高级集成；需要 `--profile` 与 `--with`。 |
 | `k` | 凭据管理菜单：更新 Key、更新 Base URL、从上游 `GET /models` 列表选模型，或全部重配（端点、Key、模型）。 |
 | `-k, --key <key>` | API Key；跳过掩码输入。 |

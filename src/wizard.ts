@@ -18,10 +18,10 @@ import { isHttpUrl, type DzcfAction, type DzcfOptions } from './args.ts'
 import { API_KEY_REF, BASE_URL_REF, MESSAGES, PUBLIC_BASE_URL, translate, type Lang } from './i18n.ts'
 import type { PromptFn, PromptOutcome, PromptQuestion } from './ui.ts'
 import type { RunFn, RunResult } from './exec.ts'
-import { detectPackageManager, dshAvailable, installDshArgs, REGISTRY_OPTIONS } from './exec.ts'
+import { detectPackageManager, dshAvailable, installDshArgs, runInteractive, REGISTRY_OPTIONS } from './exec.ts'
 import { ensureHomeDirectory, maskKey, readCredentials, writeCredentials } from './credentials.ts'
 import { writeEnvFile } from './dotenv.ts'
-import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, removePlugin, setPnpmBinOverride, writeProfileNpmrc } from './profile.ts'
+import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, readDefaultProfile, removePlugin, setPnpmBinOverride, writeDefaultProfile, writeProfileNpmrc } from './profile.ts'
 
 /** Everything the wizard touches that an environment can provide. */
 export interface WizardContext {
@@ -572,7 +572,10 @@ async function createProfileWithRecovery(
     err(t('profileBrokenHint', { path: `${dshHomeDisplay(home)}/profiles/${profile}` }))
   }
   let create = createProfile(run, surface, profile)
-  if (create.status === 0) return true
+  if (create.status === 0) {
+    await writeDefaultProfile(home, profile)
+    return true
+  }
   if (!(context.interactive || options.yes)) {
     fail(create)
     return false
@@ -592,6 +595,7 @@ async function createProfileWithRecovery(
     return false
   }
   await allowProfileBuilds(home, profile)
+  await writeDefaultProfile(home, profile)
   out(t('profileRecovered', { profile }))
   return true
 }
@@ -1098,6 +1102,26 @@ async function runUpdate(context: WizardContext, t: T, options: DzcfOptions): Pr
   return 0
 }
 
+/**
+ * The `dsh-tui` launcher: start the default profile's terminal UI with the
+ * terminal attached, announcing which profile configuration is loading
+ * before handing over.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @returns the launcher's exit code.
+ */
+function runLaunchTui(context: WizardContext, t: T): number {
+  const { home, out, err } = context
+  const profile = readDefaultProfile(home)
+  const configPath = `${dshHomeDisplay(home)}/profiles/${profile}`
+  if (listProfileBundles(home, profile) === undefined) {
+    err(t('launchTuiMissing', { path: configPath }))
+    return 1
+  }
+  out(t('launchTuiNotice', { path: configPath }))
+  return runInteractive('dsh', ['--profile', profile])
+}
+
 /** The integrations-only flow. */
 async function runConfigure(context: WizardContext, t: T, options: DzcfOptions): Promise<number> {
   const { home, out, err } = context
@@ -1319,6 +1343,7 @@ export async function runWizard(context: WizardContext, options: DzcfOptions): P
       case 'update': code = await runUpdate(context, t, options); break
       case 'configure': code = await runConfigure(context, t, options); break
       case 'credentials': code = await runCredentials(context, t, options); break
+      case 'tui': code = runLaunchTui(context, t); break
       default: code = 0
     }
     // A finished flow only loops back to the menu when the interactive user

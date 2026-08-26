@@ -59,6 +59,7 @@ Nothing else is touched: no profile files are rewritten, no `cordis.yml` is gene
 | `n` | Recommended-plugin market: multi-select from the 24 curated picks (default dzcf profile). |
 | `l` | Manage installed plugins: list and remove picked ones (default dzcf profile). |
 | `u` | Update installed plugins: multi-select refreshes picked entries to npm latest; non-interactive with no `--plugin` updates all. |
+| `tui` / `dsh-tui` | Launch the default profile's terminal UI directly (the `dsh-tui` bin works after a global install), announcing the config source first. |
 | `c` | Advanced integrations; requires `--profile` and `--with`. |
 | `k` | Credential management menu: update the key, the base URL, pick a model from the upstream `GET /models` listing, or reconfigure all (endpoint, key, model). |
 | `-k, --key <key>` | API key; skip the masked prompt. |

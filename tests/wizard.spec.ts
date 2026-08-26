@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DzcfOptions } from '../src/args.ts'
 import { credentialsPath, ensureHomeDirectory, readCredentials, writeCredentials } from '../src/credentials.ts'
 import { RECOMMENDED_PLUGINS } from '../src/marketplace.ts'
+import { writeDefaultProfile } from '../src/profile.ts'
 import type { RunFn, RunResult } from '../src/exec.ts'
 import type { PromptOutcome, PromptQuestion } from '../src/ui.ts'
 import { runWizard, type WizardContext } from '../src/wizard.ts'
@@ -921,6 +922,28 @@ describe('runWizard — marketplace and manage', () => {
     expect(workspace).toContain('onlyBuiltDependencies:')
     expect(workspace).toContain("'@ast-grep/cli'")
     expect(lines.join('\n')).toContain('已加入')
+  })
+
+  it('dsh-tui launches the default profile with a config-source notice', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } } }))
+    await writeDefaultProfile(home, 'dzcf')
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, ...outputLines(lines) }), { ...OPTIONS, action: 'tui' })
+    // Without a real dsh on the test PATH the launcher exits nonzero, but the
+    // notice line and profile resolution are what this test pins.
+    expect(lines.join('\n')).toContain('正在从')
+    expect(lines.join('\n')).toContain(join('profiles', 'dzcf'))
+    expect(code).not.toBe(0)
+  })
+
+  it('dsh-tui fails loud when the default profile is missing', async () => {
+    const home = await tempHome()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, ...outputLines(lines) }), { ...OPTIONS, action: 'tui' })
+    expect(code).toBe(1)
+    expect(lines.join('\n')).toContain('默认 profile 不存在')
   })
 
   it('fails loud when the update target profile is missing', async () => {

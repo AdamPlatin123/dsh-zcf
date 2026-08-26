@@ -33,6 +33,19 @@ export type RunFn = (
  * @param env - optional environment override (merged over `process.env`).
  * @returns the run result.
  */
+/**
+ * Run a command with the terminal attached (stdin/stdout/stderr inherited),
+ * for launchers the user is meant to interact with; Ctrl-C reaches the child
+ * directly. Returns the child's exit code (1 when it cannot spawn).
+ * @param command - executable name or path.
+ * @param args - arguments.
+ * @returns the exit code.
+ */
+export function runInteractive(command: string, args: readonly string[]): number {
+  const result = spawnSync(command, [...args], { stdio: 'inherit' })
+  return result.status ?? 1
+}
+
 export function runCommand(
   command: string,
   args: readonly string[],

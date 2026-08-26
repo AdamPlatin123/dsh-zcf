@@ -296,8 +296,16 @@ export const MESSAGES: MessageTable = {
     'en': '✓ All set! Getting started:',
   },
   onboardingLaunchTui: {
-    'zh-CN': '启动终端 UI：`dsh --profile {profile}`（Claude Code 风格交互，直接提问即可）',
-    'en': 'Launch the terminal UI: `dsh --profile {profile}` (Claude Code-style chat; just ask)',
+    'zh-CN': '启动终端 UI：`dsh-tui`（或 `dsh --profile {profile}`；Claude Code 风格交互，直接提问即可）',
+    'en': 'Launch the terminal UI: `dsh-tui` (or `dsh --profile {profile}`; Claude Code-style chat; just ask)',
+  },
+  launchTuiNotice: {
+    'zh-CN': '正在从 {path} 的配置启动 dsh-tui……',
+    'en': 'Starting dsh-tui from the configuration at {path}…',
+  },
+  launchTuiMissing: {
+    'zh-CN': '默认 profile 不存在（{path}）。先运行 npx dsh-zcf 完成初始化。',
+    'en': 'The default profile does not exist ({path}). Run npx dsh-zcf to initialize first.',
   },
   onboardingLaunchWeb: {
     'zh-CN': '启动 Web 界面：`dsh web`，然后浏览器打开 http://127.0.0.1:3080',

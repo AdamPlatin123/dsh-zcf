@@ -39,6 +39,33 @@ export function setPnpmBinOverride(dir: string | undefined): void {
   pnpmBinOverride = dir
 }
 
+/** The profile the `dsh-tui` launcher starts; defaults to the wizard's own. */
+const DEFAULT_PROFILE_FILE = 'default-profile'
+
+/**
+ * Remember which profile the wizard last built, so the `dsh-tui` launcher
+ * starts it by default.
+ * @param home - resolved harness home.
+ * @param profile - profile name to record.
+ */
+export async function writeDefaultProfile(home: string, profile: string): Promise<void> {
+  await writeFileAtomic(join(home, '.zcf', DEFAULT_PROFILE_FILE), `${profile}\n`, { mode: 0o600, dirMode: 0o700 })
+}
+
+/**
+ * The recorded default profile name, or `dzcf` when nothing was recorded.
+ * @param home - resolved harness home.
+ * @returns the profile `dsh-tui` should start.
+ */
+export function readDefaultProfile(home: string): string {
+  try {
+    const name = readFileSync(join(home, '.zcf', DEFAULT_PROFILE_FILE), 'utf8').trim()
+    return name === '' ? 'dzcf' : name
+  } catch {
+    return 'dzcf'
+  }
+}
+
 /** Environment for launcher runs: the private pnpm bin leads the PATH. */
 function launcherEnv(): Readonly<Record<string, string | undefined>> | undefined {
   if (pnpmBinOverride === undefined) return undefined

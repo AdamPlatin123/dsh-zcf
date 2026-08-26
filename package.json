@@ -1,13 +1,14 @@
 {
   "name": "dsh-zcf",
   "description": "dsh-zcf: zero-config DeepSeek Harness setup wizard — install dsh, store provider credentials, and pick a runnable profile",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publishConfig": {
     "access": "public"
   },
   "type": "module",
   "bin": {
-    "dsh-zcf": "lib/cli.cjs"
+    "dsh-zcf": "lib/cli.cjs",
+    "dsh-tui": "lib/cli.cjs"
   },
   "files": [
     "lib/*.js",
