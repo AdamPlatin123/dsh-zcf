@@ -21,7 +21,7 @@ import type { RunFn, RunResult } from './exec.ts'
 import { detectPackageManager, dshAvailable, installDshArgs, REGISTRY_OPTIONS } from './exec.ts'
 import { ensureHomeDirectory, maskKey, readCredentials, writeCredentials } from './credentials.ts'
 import { writeEnvFile } from './dotenv.ts'
-import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, removePlugin, writeProfileNpmrc } from './profile.ts'
+import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, removePlugin, setPnpmBinOverride, writeProfileNpmrc } from './profile.ts'
 
 /** Everything the wizard touches that an environment can provide. */
 export interface WizardContext {
@@ -138,6 +138,12 @@ async function pickRegistry(context: WizardContext, t: T, options: DzcfOptions):
  * reports as a broken profile, and its allowlist keys do not change that. */
 const PNPM_MAJOR = 10
 
+/** Parse a major version out of `pnpm -v` stdout. */
+function parseMajor(stdout: string): number | undefined {
+  const major = Number.parseInt(stdout.trim().split('.')[0] ?? '', 10)
+  return Number.isNaN(major) ? undefined : major
+}
+
 /** The PATH pnpm's major version, or undefined when pnpm does not answer. */
 function pnpmMajorVersion(run: RunFn): number | undefined {
   // Probe from a neutral directory: pnpm 11 reads a `packageManager` field
@@ -146,8 +152,7 @@ function pnpmMajorVersion(run: RunFn): number | undefined {
   // a project.
   const result = run('pnpm', ['-v'], undefined, undefined, tmpdir())
   if (result.status !== 0) return undefined
-  const major = Number.parseInt(result.stdout.trim().split('.')[0] ?? '', 10)
-  return Number.isNaN(major) ? undefined : major
+  return parseMajor(result.stdout)
 }
 
 /**
@@ -166,41 +171,45 @@ function ensurePnpm(context: WizardContext, t: T, options: DzcfOptions): boolean
   if (currentMajor === PNPM_MAJOR) return true
   // A wrong-major pnpm must be replaced through npm: `pm` may resolve to that
   // very pnpm, and the uninstall below would remove it out from under us.
-  const needsDowngrade = currentMajor !== undefined && currentMajor !== PNPM_MAJOR
-  const pm = needsDowngrade ? 'npm' : detectPackageManager(run)
-  if (pm === undefined) {
+  if (currentMajor === PNPM_MAJOR) return true
+  // Compatibility over modification: the user's own pnpm stays untouched.
+  // A private pnpm@10 is installed under the harness home and only its bin
+  // directory is prepended to launcher subprocess PATHs, so `dsh plugin`
+  // sees pnpm-10 semantics while the system pnpm keeps whatever major the
+  // user chose.
+  const npm = run('npm', ['-v']).status === 0 ? 'npm' : undefined
+  if (npm === undefined) {
     err(t('noPackageManager'))
     return false
   }
+  const privateRoot = join(context.home, '.zcf', `pnpm${PNPM_MAJOR}`)
+  const privateBin = join(privateRoot, 'node_modules', '.bin')
   const registryArgs = options.registry === undefined ? [] : [`--registry=${options.registry}`]
-  const args = pm === 'pnpm'
-    ? ['add', '--global', `pnpm@${PNPM_MAJOR}`, ...registryArgs]
-    : ['install', '--global', `pnpm@${PNPM_MAJOR}`, '--no-audit', '--no-fund', ...registryArgs, ...(needsDowngrade ? ['--force'] : [])]
-  if (options.dryRun) {
-    out(t('dryRunNotice'))
-    out(`  - ${pm} ${args.join(' ')}`)
-    return true
+  const args = ['install', '--prefix', privateRoot, `pnpm@${PNPM_MAJOR}`, '--no-audit', '--no-fund', ...registryArgs]
+  const installed = run(join(privateBin, 'pnpm'), ['-v'], undefined, undefined, tmpdir())
+  if (installed.status !== 0 && currentMajor === undefined) {
+    out(t('pnpmPrivateNotice'))
+  } else if (installed.status !== 0) {
+    out(t('pnpmPrivateWrongMajorNotice', { major: String(currentMajor) }))
   }
-  // No separate confirmation: the user already agreed to the (much larger)
-  // dsh install, and pnpm is its runtime companion, not a new decision.
-  if (needsDowngrade) {
-    out(t('pnpmDowngradeNotice', { major: String(currentMajor) }))
-    // npm refuses to replace an existing global bin without removing it first.
-    const uninstall = run('npm', ['uninstall', '--global', 'pnpm'])
-    if (uninstall.status !== 0) {
-      err(t('pnpmInstallFailed', { stderr: uninstall.stderr.trim() }))
+  if (installed.status !== 0 || options.dryRun) {
+    if (options.dryRun) {
+      out(t('dryRunNotice'))
+      out(`  - ${npm} ${args.join(' ')}`)
+      setPnpmBinOverride(privateBin)
+      return true
+    }
+    out(t('pnpmInstalling', { command: `${npm} ${args.join(' ')}` }))
+    const install = run(npm, args)
+    // Judge by the result: the private binary answering at the right major.
+    const verify = run(join(privateBin, 'pnpm'), ['-v'], undefined, undefined, tmpdir())
+    if (verify.status !== 0 || parseMajor(verify.stdout) !== PNPM_MAJOR) {
+      err(t('pnpmInstallFailed', { stderr: install.stderr.trim() }))
       return false
     }
   }
-  out(t('pnpmInstalling', { command: `${pm} ${args.join(' ')}` }))
-  const install = run(pm, args)
-  // Judge by the result: a --force reinstall may exit nonzero over a warning
-  // while the binary is actually in place at the right major.
-  if (pnpmMajorVersion(run) !== PNPM_MAJOR) {
-    err(t('pnpmInstallFailed', { stderr: install.stderr.trim() }))
-    return false
-  }
-  out(t('pnpmInstalled'))
+  setPnpmBinOverride(privateBin)
+  out(t('pnpmPrivateReady'))
   return true
 }
 

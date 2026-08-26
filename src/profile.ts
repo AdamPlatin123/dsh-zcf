@@ -26,8 +26,27 @@ import type { RunFn, RunResult } from './exec.ts'
 /** Milliseconds a profile pnpm operation may run before counting as hung. */
 const PLUGIN_TIMEOUT_MS = 180_000
 
+/**
+ * Private pnpm-10 bin directory prepended to every launcher subprocess PATH.
+ * Set by the wizard when the system pnpm is missing or a wrong major; a
+ * private copy keeps the user's own global pnpm untouched while the launcher
+ * still sees pnpm-10 semantics.
+ */
+let pnpmBinOverride: string | undefined
+
+/** Point launcher subprocesses at a private pnpm bin directory. */
+export function setPnpmBinOverride(dir: string | undefined): void {
+  pnpmBinOverride = dir
+}
+
+/** Environment for launcher runs: the private pnpm bin leads the PATH. */
+function launcherEnv(): Readonly<Record<string, string | undefined>> | undefined {
+  if (pnpmBinOverride === undefined) return undefined
+  return { PATH: `${pnpmBinOverride}:${process.env.PATH ?? ''}` }
+}
+
 function pluginAdd(run: RunFn, profile: string, pkg: string): RunResult {
-  return run('dsh', ['plugin', '--profile', profile, 'add', '-w', pkg], undefined, PLUGIN_TIMEOUT_MS)
+  return run('dsh', ['plugin', '--profile', profile, 'add', '-w', pkg], launcherEnv(), PLUGIN_TIMEOUT_MS)
 }
 
 /**
@@ -86,7 +105,7 @@ export async function allowProfileBuilds(home: string, profile: string, extra: r
 
 /** Run `dsh plugin --profile <name> remove -w <pkg>`; nonzero fails the run. */
 function pluginRemove(run: RunFn, profile: string, pkg: string): RunResult {
-  return run('dsh', ['plugin', '--profile', profile, 'remove', '-w', pkg], undefined, PLUGIN_TIMEOUT_MS)
+  return run('dsh', ['plugin', '--profile', profile, 'remove', '-w', pkg], launcherEnv(), PLUGIN_TIMEOUT_MS)
 }
 
 /** Absolute path of a profile's user patch layer. */

@@ -51,17 +51,21 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '现在用 {pm} 全局安装 @deepseek-ai/dsh 吗？',
     'en': 'Install @deepseek-ai/dsh globally with {pm} now?',
   },
-  pnpmDowngradeNotice: {
-    'zh-CN': '检测到 pnpm {major}：dsh 的插件管理按 pnpm 10 的行为设计（pnpm 11 会把被拒构建脚本当作安装失败）。正在降级到 pnpm 10……',
-    'en': 'pnpm {major} detected: the launcher expects pnpm 10 semantics (pnpm 11 treats refused build scripts as a hard failure). Downgrading to pnpm 10…',
+  pnpmPrivateNotice: {
+    'zh-CN': '未找到 pnpm：dsh 的插件管理需要它。将安装一份 zcf 私有的 pnpm（不影响系统环境）……',
+    'en': 'pnpm not found: the launcher needs it for plugin management. Installing a zcf-private pnpm (your system stays untouched)…',
+  },
+  pnpmPrivateWrongMajorNotice: {
+    'zh-CN': '检测到系统 pnpm {major}：dsh 的插件管理按 pnpm 10 的行为设计（pnpm 11 会把被拒构建脚本当作安装失败）。将安装一份 zcf 私有的 pnpm 10，系统 pnpm 保持不变……',
+    'en': 'System pnpm {major} detected: the launcher expects pnpm 10 semantics (pnpm 11 treats refused build scripts as a hard failure). Installing a zcf-private pnpm 10; your system pnpm stays as-is…',
+  },
+  pnpmPrivateReady: {
+    'zh-CN': '✓ zcf 私有 pnpm 10 已就绪（仅向导内部使用）',
+    'en': '✓ zcf-private pnpm 10 ready (wizard-internal only)',
   },
   pnpmInstalling: {
     'zh-CN': '正在安装 pnpm：{command}',
     'en': 'Installing pnpm: {command}',
-  },
-  pnpmInstalled: {
-    'zh-CN': '✓ pnpm 安装完成',
-    'en': '✓ pnpm installed',
   },
   pnpmInstallFailed: {
     'zh-CN': 'pnpm 安装失败：{stderr}',
