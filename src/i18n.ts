@@ -323,6 +323,14 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '提示：之后可运行 `{command}` 让 dsh-tui 命令全局可用。',
     'en': 'Hint: run `{command}` later to make the dsh-tui command globally available.',
   },
+  preflightConflictRemoved: {
+    'zh-CN': '检测到 dsh-claude-move 与 dsh-chat-import 工具名冲突（同注册 import_claude，二者无法共存）——正在自动移除 dsh-claude-move……',
+    'en': 'dsh-claude-move conflicts with dsh-chat-import (both register import_claude; they cannot coexist) — removing dsh-claude-move automatically…',
+  },
+  preflightCredentialsMigrating: {
+    'zh-CN': '凭据文件为旧版扁平格式——正在迁移为当前版本格式（值不变）……',
+    'en': 'Credentials file uses the pre-release flat layout — migrating to the current versioned layout (values unchanged)…',
+  },
   launchTuiNotice: {
     'zh-CN': '正在从 {path} 的配置启动 dsh-tui……',
     'en': 'Starting dsh-tui from the configuration at {path}…',

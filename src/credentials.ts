@@ -141,6 +141,35 @@ export async function writeCredentials(home: string, entries: Readonly<Record<st
 }
 
 /**
+ * Whether the credentials document still carries flat top-level entries the
+ * current provider rejects (pre-release layout, or the mixed state earlier
+ * wizard writes could leave); a save would migrate them into `refs:`.
+ * @param home - resolved harness home.
+ * @returns true when a migration write is pending.
+ */
+export function needsV1Migration(home: string): boolean {
+  let raw: ParsedDocument
+  try {
+    raw = readParsedDocument(home)
+  } catch {
+    return false
+  }
+  return Object.entries(raw.document).some(([key]) => key !== 'version' && key !== 'refs' && key !== 'records' && isValidRef(key))
+}
+
+/**
+ * Migrate the credentials document into the versioned layout when needed.
+ * Values never change — only the wrapper does.
+ * @param home - resolved harness home.
+ * @returns true when a migration write happened.
+ */
+export async function migrateCredentialsIfNeeded(home: string): Promise<boolean> {
+  if (!needsV1Migration(home)) return false
+  await writeCredentials(home, {})
+  return true
+}
+
+/**
  * Ensure the harness-home directory exists owner-only (0700). Existing
  * directories keep their mode; the credential document itself still commits
  * 0600 through the atomic write.

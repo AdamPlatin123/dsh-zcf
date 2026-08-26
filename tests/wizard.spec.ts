@@ -6,6 +6,7 @@ import type { DzcfOptions } from '../src/args.ts'
 import { credentialsPath, ensureHomeDirectory, readCredentials, writeCredentials } from '../src/credentials.ts'
 import { RECOMMENDED_PLUGINS } from '../src/marketplace.ts'
 import { writeDefaultProfile } from '../src/profile.ts'
+import yaml from 'js-yaml'
 import type { RunFn, RunResult } from '../src/exec.ts'
 import type { PromptOutcome, PromptQuestion } from '../src/ui.ts'
 import { runWizard, type WizardContext } from '../src/wizard.ts'
@@ -99,6 +100,7 @@ const context = async (overrides: Partial<WizardContext> & { home: string }): Pr
   installDsh: scriptedInstall().installDsh,
   probeRegistry: NO_PROBE,
   fetchModels: NO_MODELS,
+  runInteract: () => 127,
   prompt: scriptedPrompt({}).prompt,
   interactive: false,
   out: () => {},
@@ -118,6 +120,7 @@ describe('runWizard — non-interactive init', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      runInteract: () => 127,
       prompt: vi.fn(),
       interactive: false,
       ...outputLines(lines),
@@ -182,6 +185,7 @@ describe('runWizard — non-interactive init', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      runInteract: () => 127,
       prompt: vi.fn(),
       interactive: false,
       ...outputLines(lines),
@@ -207,6 +211,7 @@ describe('runWizard — non-interactive init', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      runInteract: () => 127,
       prompt: vi.fn(),
       interactive: false,
       ...outputLines(lines),
@@ -289,6 +294,7 @@ describe('runWizard — integrations', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      runInteract: () => 127,
       prompt: vi.fn(),
       interactive: false,
       ...outputLines(lines),
@@ -311,6 +317,7 @@ describe('runWizard — interactive', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      runInteract: () => 127,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -331,6 +338,7 @@ describe('runWizard — interactive', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      runInteract: () => 127,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -351,6 +359,7 @@ describe('runWizard — interactive', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      runInteract: () => 127,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -394,6 +403,7 @@ describe('runWizard — interactive', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      runInteract: () => 127,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -511,6 +521,7 @@ describe('runWizard — registry pick and install streaming', () => {
       installDsh,
       probeRegistry: async url => latencies.get(url),
       fetchModels: NO_MODELS,
+      runInteract: () => 127,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -543,6 +554,7 @@ describe('runWizard — registry pick and install streaming', () => {
       installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      runInteract: () => 127,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -966,6 +978,29 @@ describe('runWizard — marketplace and manage', () => {
     expect(code).toBe(0)
     expect(base.calls).toContainEqual({ command: 'npm', args: ['install', '--global', 'dsh-zcf@0.4.3'] })
     expect(lines.join('\n')).toContain('dsh-tui 已全局就绪')
+  })
+
+  it('dsh-tui preflight repairs conflicts and migrates flat credentials', async () => {
+    const home = await tempHome()
+    await ensureHomeDirectory(home)
+    await writeFile(credentialsPath(home), 'DEEPSEEK_API_KEY: sk-flat-1234567890\n')
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-claude-move', 'dsh-chat-import'] } } }))
+    await writeDefaultProfile(home, 'dzcf')
+    const { run, calls } = scriptedRun()
+    const launches: string[][] = []
+    const interact = (command: string, args: readonly string[]): number => { launches.push([command, ...args]); return 127 }
+    const context2 = await context({ home, run, runInteract: interact })
+    const lines: string[] = []
+    const code = await runWizard({ ...context2, out: (text: string) => { lines.push(text) } }, { ...OPTIONS, action: 'tui' })
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'remove', '-w', 'dsh-claude-move'] })
+    expect(launches).toContainEqual(['dsh', '--profile', 'dzcf'])
+    expect(lines.join('\n')).toContain('自动移除')
+    expect(lines.join('\n')).toContain('迁移')
+    const document = yaml.load(await readFile(credentialsPath(home), 'utf8')) as { version?: number; refs?: Record<string, string> }
+    expect(document.version).toBe(1)
+    expect(document.refs?.DEEPSEEK_API_KEY).toBe('sk-flat-1234567890')
+    expect(code).not.toBe(0)
   })
 
   it('dsh-tui fails loud when the default profile is missing', async () => {

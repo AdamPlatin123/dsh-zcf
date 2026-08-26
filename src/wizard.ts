@@ -18,8 +18,8 @@ import { isHttpUrl, type DzcfAction, type DzcfOptions } from './args.ts'
 import { API_KEY_REF, BASE_URL_REF, MESSAGES, PUBLIC_BASE_URL, translate, type Lang } from './i18n.ts'
 import type { PromptFn, PromptOutcome, PromptQuestion } from './ui.ts'
 import type { RunFn, RunResult } from './exec.ts'
-import { detectPackageManager, dshAvailable, installDshArgs, runInteractive, REGISTRY_OPTIONS } from './exec.ts'
-import { ensureHomeDirectory, maskKey, readCredentials, writeCredentials } from './credentials.ts'
+import { detectPackageManager, dshAvailable, installDshArgs, REGISTRY_OPTIONS } from './exec.ts'
+import { ensureHomeDirectory, maskKey, migrateCredentialsIfNeeded, needsV1Migration, readCredentials, writeCredentials } from './credentials.ts'
 import { writeEnvFile } from './dotenv.ts'
 import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, readDefaultProfile, removePlugin, setPnpmBinOverride, writeDefaultProfile, writeProfileNpmrc } from './profile.ts'
 
@@ -37,6 +37,8 @@ export interface WizardContext {
   probeRegistry: (url: string) => Promise<number | undefined>
   /** Upstream `GET /models` listing; undefined when the endpoint does not answer. */
   fetchModels: (baseUrl: string, key: string) => Promise<readonly string[] | undefined>
+  /** Interactive launcher run with the terminal attached; returns the exit code. */
+  runInteract: (command: string, args: readonly string[]) => number
   /** Interactive prompt implementation. */
   prompt: PromptFn
   /** True when stdin and stdout are both a TTY. */
@@ -1159,16 +1161,31 @@ async function runUpdate(context: WizardContext, t: T, options: DzcfOptions): Pr
  * @param t - translator.
  * @returns the launcher's exit code.
  */
-function runLaunchTui(context: WizardContext, t: T): number {
-  const { home, out, err } = context
+async function runLaunchTui(context: WizardContext, t: T): Promise<number> {
+  const { home, out, err, run } = context
   const profile = readDefaultProfile(home)
   const configPath = `${dshHomeDisplay(home)}/profiles/${profile}`
-  if (listProfileBundles(home, profile) === undefined) {
+  const bundles = listProfileBundles(home, profile)
+  if (bundles === undefined) {
     err(t('launchTuiMissing', { path: configPath }))
     return 1
   }
+  // Preflight repairs, so "run dsh-tui and it works" holds regardless of the
+  // order the user ran the other flows in.
+  if (bundles.includes('dsh-claude-move') && bundles.includes('dsh-chat-import')) {
+    out(t('preflightConflictRemoved'))
+    const removed = removePlugin(run, profile, 'dsh-claude-move')
+    if (removed.status !== 0) {
+      err(t('pluginRemoveFailed', { plugin: 'dsh-claude-move', stderr: [removed.stderr.trim(), removed.stdout.trim()].filter(part => part !== '').join('\n') }))
+      return 1
+    }
+  }
+  if (needsV1Migration(home)) {
+    out(t('preflightCredentialsMigrating'))
+    await migrateCredentialsIfNeeded(home)
+  }
   out(t('launchTuiNotice', { path: configPath }))
-  return runInteractive('dsh', ['--profile', profile])
+  return context.runInteract('dsh', ['--profile', profile])
 }
 
 /** The integrations-only flow. */
@@ -1396,7 +1413,7 @@ export async function runWizard(context: WizardContext, options: DzcfOptions): P
       case 'update': code = await runUpdate(context, t, options); break
       case 'configure': code = await runConfigure(context, t, options); break
       case 'credentials': code = await runCredentials(context, t, options); break
-      case 'tui': code = runLaunchTui(context, t); break
+      case 'tui': code = await runLaunchTui(context, t); break
       default: code = 0
     }
     // A finished flow only loops back to the menu when the interactive user

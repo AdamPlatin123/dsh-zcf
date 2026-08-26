@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { CommanderError } from 'commander'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { parseDzcfArgs } from './args.ts'
-import { fetchUpstreamModels, installDshStreaming, probeRegistryLatency, runCommand } from './exec.ts'
+import { fetchUpstreamModels, installDshStreaming, probeRegistryLatency, runCommand, runInteractive } from './exec.ts'
 import { createPromptPort } from './ui.ts'
 import { runWizard } from './wizard.ts'
 
@@ -37,6 +37,7 @@ const main = async (): Promise<void> => {
     installDsh: (pm, args, onLine) => installDshStreaming(pm, args, onLine),
     probeRegistry: probeRegistryLatency,
     fetchModels: fetchUpstreamModels,
+    runInteract: runInteractive,
     prompt: createPromptPort(),
     interactive: process.stdin.isTTY && process.stdout.isTTY,
     out: text => process.stdout.write(`${text}\n`),
