@@ -1463,9 +1463,10 @@ export async function runWizard(context: WizardContext, options: DzcfOptions): P
       default: code = 0
     }
     // A finished flow only loops back to the menu when the interactive user
-    // asks for it; non-interactive and --yes runs exit straight away, and a
-    // failed flow exits with its code instead of offering another round.
-    if (code !== 0 || !context.interactive || options.yes) return code
+    // asks for it; non-interactive and --yes runs exit straight away, a
+    // failed flow exits with its code, and the terminal launcher is a
+    // passthrough — leaving the TUI means leaving the wizard too.
+    if (code !== 0 || !context.interactive || options.yes || action === 'tui') return code
     const again = await askOne(context.prompt, { type: 'confirm', name: 'returnToMenu', message: t('returnToMenu'), default: false })
     if (again.status === 'cancelled' || again.value.returnToMenu !== true) return code
     const next = await pickAction(context, t, { ...options, action: 'menu' })

@@ -1020,6 +1020,23 @@ describe('runWizard — marketplace and manage', () => {
     expect(calls.some(call => call.args.includes('dsh-message-edit') || call.args.includes('dsh-full-remote'))).toBe(false)
   })
 
+  it('leaving the TUI exits the wizard without a return-to-menu prompt', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-harness-tui/dsh-tui'] } } }))
+    await writeDefaultProfile(home, 'dzcf')
+    const asked: string[] = []
+    const prompt = async (questions: readonly PromptQuestion[]): Promise<PromptOutcome> => {
+      const question = questions[0]
+      if (question !== undefined) asked.push(question.name)
+      return { status: 'cancelled' }
+    }
+    const { run } = scriptedRun()
+    const code = await runWizard(await context({ home, run, prompt, interactive: true, runInteract: () => 0 }), { ...OPTIONS, action: 'tui' })
+    expect(code).toBe(0)
+    expect(asked).toEqual([])
+  })
+
   it('dsh-tui preflight removes web-only plugins from a tui profile', async () => {
     const home = await tempHome()
     await ensureHomeDirectory(home)
