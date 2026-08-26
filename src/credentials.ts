@@ -74,15 +74,21 @@ export function readCredentials(home: string): Record<string, string> {
  * @returns the raw mapping, or an empty mapping when absent.
  */
 function readRawDocument(home: string): Record<string, unknown> {
+  const path = credentialsPath(home)
+  let parsed: unknown
   try {
-    const parsed: unknown = yaml.load(readFileSync(credentialsPath(home), 'utf8'))
-    if (parsed !== null && parsed !== undefined && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>
-    }
-  } catch {
-    // fall through to an empty document; the strict read reports the failure
+    parsed = yaml.load(readFileSync(path, 'utf8'))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}
+    // Never write over a document the wizard cannot parse: fail the save so
+    // the user repairs the file by hand instead of losing what is in it.
+    throw new Error(`dsh-zcf: cannot parse credentials document ${path}: ${(error as Error).message}`)
   }
-  return {}
+  if (parsed === undefined || parsed === null) return {}
+  if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`dsh-zcf: credentials document ${path} must be a YAML mapping of reference to value`)
+  }
+  return parsed as Record<string, unknown>
 }
 
 /**
