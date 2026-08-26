@@ -296,8 +296,8 @@ export const MESSAGES: MessageTable = {
     'en': '✓ All set! Getting started:',
   },
   onboardingLaunchTui: {
-    'zh-CN': '启动终端 UI：`dsh-tui`（或 `dsh --profile {profile}`；Claude Code 风格交互，直接提问即可）',
-    'en': 'Launch the terminal UI: `dsh-tui` (or `dsh --profile {profile}`; Claude Code-style chat; just ask)',
+    'zh-CN': '启动终端 UI：`dsh --profile {profile}`（全局安装 dsh-zcf 后可简写 `dsh-tui`；直接提问即可）',
+    'en': 'Launch the terminal UI: `dsh --profile {profile}` (shortens to `dsh-tui` after a global dsh-zcf install; just ask)',
   },
   launchTuiNotice: {
     'zh-CN': '正在从 {path} 的配置启动 dsh-tui……',
