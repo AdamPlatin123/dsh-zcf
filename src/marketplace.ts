@@ -24,6 +24,9 @@ export interface RecommendedPlugin {
   category: RecommendedCategory
   /** Credential references the wizard prompts for and stores in `$DSH_HOME/.env`. */
   envKeys?: readonly string[]
+  /** When set, the only runtime surface this plugin works on (it waits for a
+   * service the other surfaces never provide, which stalls profile boot). */
+  surface?: 'web'
 }
 
 /** The catalog's directions, in display order. */
@@ -106,6 +109,7 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
   {
     id: 'dsh-message-edit',
     category: 'web-ui',
+    surface: 'web',
     label: { 'zh-CN': 'dsh-message-edit 消息编辑', 'en': 'dsh-message-edit message edit' },
     hint: { 'zh-CN': '分支式消息编辑、reroll、重试与多版本', 'en': 'Branching message edit, reroll, retry, and multi-version' },
   },
@@ -142,6 +146,7 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
   {
     id: 'dsh-full-remote',
     category: 'infra',
+    surface: 'web',
     label: { 'zh-CN': 'dsh-full-remote 远程访问', 'en': 'dsh-full-remote remote access' },
     hint: { 'zh-CN': '令牌反向代理远程恢复设置/凭据/目录，扫码邀请、按设备会话', 'en': 'Token reverse proxy restoring settings/credentials/directory remotely; QR invite, per-device sessions' },
   },
@@ -184,6 +189,19 @@ export const RECOMMENDED_PLUGINS: readonly RecommendedPlugin[] = [
  */
 export function recommendedPluginOf(id: string): RecommendedPlugin | undefined {
   return RECOMMENDED_PLUGINS.find(plugin => plugin.id === id)
+}
+
+/** The bundle whose presence marks a profile as the terminal (TUI) surface. */
+const TUI_BUNDLE = '@deepseek-harness-tui/dsh-tui'
+
+/**
+ * Whether a profile runs the terminal surface — web-only entries stay listed
+ * there with an explanatory note and are skipped at install time, because
+ * they wait for the web UI's host service at boot and would stall it.
+ * @param bundles - the profile's registered bundles.
+ */
+export function isTuiProfile(bundles: readonly string[] | undefined): boolean {
+  return bundles?.includes(TUI_BUNDLE) ?? false
 }
 
 /** Validate a `--plugin` list; unknown ids fail loud with the known set. */

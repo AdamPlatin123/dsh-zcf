@@ -1003,6 +1003,36 @@ describe('runWizard — marketplace and manage', () => {
     expect(code).not.toBe(0)
   })
 
+  it('skips web-only plugins when installing into a tui profile', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-harness-tui/dsh-tui'] } } }))
+    const scripted = scriptedInstall()
+    const { run, calls } = scriptedRun()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, installDsh: scripted.installDsh, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'marketplace', plugins: ['dsh-lens', 'dsh-message-edit', 'dsh-full-remote'],
+    })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('跳过 dsh-message-edit')
+    expect(lines.join('\n')).toContain('跳过 dsh-full-remote')
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-lens'] })
+    expect(calls.some(call => call.args.includes('dsh-message-edit') || call.args.includes('dsh-full-remote'))).toBe(false)
+  })
+
+  it('dsh-tui preflight removes web-only plugins from a tui profile', async () => {
+    const home = await tempHome()
+    await ensureHomeDirectory(home)
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-harness-tui/dsh-tui', 'dsh-message-edit'] } } }))
+    await writeDefaultProfile(home, 'dzcf')
+    const { run, calls } = scriptedRun()
+    const lines: string[] = []
+    await runWizard(await context({ home, run, ...outputLines(lines) }), { ...OPTIONS, action: 'tui' })
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'remove', '-w', 'dsh-message-edit'] })
+    expect(lines.join('\n')).toContain('自动移除')
+  })
+
   it('dsh-tui fails loud when the default profile is missing', async () => {
     const home = await tempHome()
     const lines: string[] = []

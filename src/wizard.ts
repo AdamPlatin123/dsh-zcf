@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { dshHomeDisplay } from '@deepseek-ai/dsh-home-paths'
 import { renderBanner, renderMenuLines, type MenuAction } from './banner.ts'
 import { CAPABILITIES, capabilityOf, type Capability, type PatchRow, type Surface } from './capabilities.ts'
-import { CATEGORY_LABELS, RECOMMENDED_PLUGINS, recommendedPluginOf, type RecommendedPlugin } from './marketplace.ts'
+import { CATEGORY_LABELS, RECOMMENDED_PLUGINS, isTuiProfile, recommendedPluginOf, type RecommendedPlugin } from './marketplace.ts'
 import { isHttpUrl, type DzcfAction, type DzcfOptions } from './args.ts'
 import { API_KEY_REF, BASE_URL_REF, MESSAGES, PUBLIC_BASE_URL, translate, type Lang } from './i18n.ts'
 import type { PromptFn, PromptOutcome, PromptQuestion } from './ui.ts'
@@ -323,8 +323,10 @@ async function ensureDsh(context: WizardContext, t: T, options: DzcfOptions): Pr
 
 /** Resolve the recommended-plugin selection for init; null on abort. */
 async function collectPlugins(context: WizardContext, t: T, options: DzcfOptions): Promise<readonly RecommendedPlugin[] | null> {
+  const tui = isTuiProfile(listProfileBundles(context.home, options.profile ?? 'dzcf'))
   if (options.plugins.length > 0) {
-    return options.plugins.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined)
+    const picked = options.plugins.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined)
+    return skipUnsupportedPlugins(context, t, picked, tui)
   }
   if (!context.interactive) return []
   const outcome = await askOne(context.prompt, {
@@ -334,7 +336,7 @@ async function collectPlugins(context: WizardContext, t: T, options: DzcfOptions
     choices: [
       { name: t('selectAll'), value: SELECT_ALL },
       ...RECOMMENDED_PLUGINS.map(plugin => ({
-        name: `[${CATEGORY_LABELS[plugin.category][context.lang]}] ${plugin.label[context.lang]} — ${plugin.hint[context.lang]}`,
+        name: `[${CATEGORY_LABELS[plugin.category][context.lang]}] ${plugin.label[context.lang]} — ${hintFor(plugin, tui, context.lang, t)}`,
         value: plugin.id,
       })),
     ],
@@ -345,7 +347,8 @@ async function collectPlugins(context: WizardContext, t: T, options: DzcfOptions
   }
   const picked = (outcome.value.plugins as readonly string[] | undefined) ?? []
   const ids = expandSelectAll(picked, RECOMMENDED_PLUGINS.map(plugin => plugin.id))
-  return ids.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined)
+  const resolved = ids.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined)
+  return skipUnsupportedPlugins(context, t, resolved, tui)
 }
 
 /** Sentinel multiselect choice standing for "every entry in this list". */
@@ -668,6 +671,37 @@ function parseIgnoredBuilds(text: string): readonly string[] {
   return [...new Set(names)]
 }
 
+/**
+ * Split picked plugins for the profile's surface: web-only entries stay
+ * visible in the picker with an explanatory note, but a terminal profile
+ * skips them at install time (they wait for the web UI host service at boot
+ * and would stall activation). Each skip is announced.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param picked - the picked catalog entries.
+ * @param tui - whether the target profile is the terminal surface.
+ * @returns the entries safe to install.
+ */
+function skipUnsupportedPlugins(
+  context: WizardContext,
+  t: T,
+  picked: readonly RecommendedPlugin[],
+  tui: boolean,
+): readonly RecommendedPlugin[] {
+  if (!tui) return picked
+  const installable = picked.filter(plugin => plugin.surface !== 'web')
+  for (const plugin of picked) {
+    if (plugin.surface === 'web') context.out(t('webOnlySkipped', { plugin: plugin.id }))
+  }
+  return installable
+}
+
+/** Append the surface note to a picker entry's hint on a terminal profile. */
+function hintFor(plugin: RecommendedPlugin, tui: boolean, lang: 'zh-CN' | 'en', t: T): string {
+  const base = plugin.hint[lang]
+  return tui && plugin.surface === 'web' ? `${base} ${t('webOnlySuffix')}` : base
+}
+
 /** Install recommended plugins into a profile; false on first failure. */
 async function installPlugins(context: WizardContext, t: T, profile: string, plugins: readonly RecommendedPlugin[]): Promise<boolean> {
   const { home } = context
@@ -911,7 +945,7 @@ async function collectInitState(context: WizardContext, t: T, options: DzcfOptio
           choices: [
             { name: t('selectAll'), value: SELECT_ALL },
             ...RECOMMENDED_PLUGINS.map(plugin => ({
-              name: `[${CATEGORY_LABELS[plugin.category][context.lang]}] ${plugin.label[context.lang]} — ${plugin.hint[context.lang]}`,
+              name: `[${CATEGORY_LABELS[plugin.category][context.lang]}] ${plugin.label[context.lang]} — ${hintFor(plugin, surface === 'tui', context.lang, t)}`,
               value: plugin.id,
             })),
           ],
@@ -920,7 +954,8 @@ async function collectInitState(context: WizardContext, t: T, options: DzcfOptio
         if (outcome.status === 'cancelled') { steppedBack = true; break }
         const pickedPlugins = (outcome.value.plugins as readonly string[] | undefined) ?? []
         const ids = expandSelectAll(pickedPlugins, RECOMMENDED_PLUGINS.map(plugin => plugin.id))
-        plugins = ids.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined)
+        const resolved = ids.map(id => recommendedPluginOf(id)).filter((plugin): plugin is RecommendedPlugin => plugin !== undefined)
+        plugins = [...skipUnsupportedPlugins(context, t, resolved, surface === 'tui')]
         break
       }
       case 'proceed': {
@@ -1183,6 +1218,17 @@ async function runLaunchTui(context: WizardContext, t: T): Promise<number> {
   if (needsV1Migration(home)) {
     out(t('preflightCredentialsMigrating'))
     await migrateCredentialsIfNeeded(home)
+  }
+  for (const id of bundles) {
+    const entry = recommendedPluginOf(id)
+    if (entry?.surface === 'web') {
+      out(t('preflightWebOnlyRemoved', { plugin: id }))
+      const removed = removePlugin(run, profile, id)
+      if (removed.status !== 0) {
+        err(t('pluginRemoveFailed', { plugin: id, stderr: [removed.stderr.trim(), removed.stdout.trim()].filter(part => part !== '').join('\n') }))
+        return 1
+      }
+    }
   }
   out(t('launchTuiNotice', { path: configPath }))
   return context.runInteract('dsh', ['--profile', profile])

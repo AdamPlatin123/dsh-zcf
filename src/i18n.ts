@@ -323,6 +323,18 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '提示：之后可运行 `{command}` 让 dsh-tui 命令全局可用。',
     'en': 'Hint: run `{command}` later to make the dsh-tui command globally available.',
   },
+  webOnlySuffix: {
+    'zh-CN': '【Web UI 专属 · TUI 形态自动跳过】',
+    'en': '[Web UI only — skipped on TUI]',
+  },
+  webOnlySkipped: {
+    'zh-CN': '跳过 {plugin}：Web UI 专属插件（依赖 Web 界面宿主服务），TUI 形态下不可用',
+    'en': 'Skipping {plugin}: a Web-UI-only plugin (it depends on the web host service); not usable on the TUI surface',
+  },
+  preflightWebOnlyRemoved: {
+    'zh-CN': '检测到 {plugin} 为 Web UI 专属插件（在 TUI 形态会卡住启动）——正在自动移除……',
+    'en': '{plugin} is a Web-UI-only plugin (it stalls boot on the TUI surface) — removing it automatically…',
+  },
   preflightConflictRemoved: {
     'zh-CN': '检测到 dsh-claude-move 与 dsh-chat-import 工具名冲突（同注册 import_claude，二者无法共存）——正在自动移除 dsh-claude-move……',
     'en': 'dsh-claude-move conflicts with dsh-chat-import (both register import_claude; they cannot coexist) — removing dsh-claude-move automatically…',
