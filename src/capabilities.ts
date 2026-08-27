@@ -44,14 +44,18 @@ export interface Capability {
  * The runtime surfaces the wizard offers. The official web bundle's npm
  * `latest` tag currently points at a broken 0.0.1-rc.1 build (missing
  * private dependencies), so it pins a caret range on the working line; the
- * tui and app community bundles keep healthy `latest` tags and are left
- * unpinned to track newest releases. The app surface is the Tauri 2 desktop
- * shell (macOS/Windows; Linux users should pick tui or web).
+ * tui community bundle keeps a healthy `latest` tag and stays unpinned to
+ * track newest releases. The app surface composes the same web bundle into
+ * the profile — DSH Desktop (anywhere-labs) runs the official web surface
+ * and its tray can pick this profile — while the desktop shell itself comes
+ * from the standalone installer flow in `desktop.ts`, not from an npm
+ * plugin. Linux and Windows-on-ARM have no desktop installer; the wizard
+ * routes those users to tui or web.
  */
 export const SURFACE_BUNDLES = {
   tui: '@deepseek-harness-tui/dsh-tui',
   web: '@deepseek-ai/dsh-web-app@^0.1.0-rc.6',
-  app: 'dsh-desktop-app@^0.4.0',
+  app: '@deepseek-ai/dsh-web-app@^0.1.0-rc.6',
 } as const
 
 /** The wizard's runtime surfaces. */

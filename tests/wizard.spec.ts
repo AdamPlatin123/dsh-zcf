@@ -10,6 +10,7 @@ import yaml from 'js-yaml'
 import type { RunFn, RunResult } from '../src/exec.ts'
 import type { PromptOutcome, PromptQuestion } from '../src/ui.ts'
 import { runWizard, type WizardContext } from '../src/wizard.ts'
+import { detectDesktopPlatform } from '../src/desktop.ts'
 
 const OPTIONS: DzcfOptions = { action: 'init', with: [], plugins: [], lang: 'zh-CN', yes: false, dryRun: false }
 
@@ -94,12 +95,18 @@ afterEach(async () => {
 
 const NO_MODELS = async (): Promise<readonly string[] | undefined> => undefined
 
+/** Fails the test if the app surface unexpectedly reaches the network. */
+const NO_FETCH = async (): Promise<Response> => {
+  throw new Error('unexpected desktop fetch in test')
+}
+
 const context = async (overrides: Partial<WizardContext> & { home: string }): Promise<WizardContext> => ({
   lang: 'zh-CN',
   run: scriptedRun().run,
   installDsh: scriptedInstall().installDsh,
   probeRegistry: NO_PROBE,
   fetchModels: NO_MODELS,
+  fetchDesktop: NO_FETCH,
   runInteract: () => 127,
   prompt: scriptedPrompt({}).prompt,
   interactive: false,
@@ -120,6 +127,7 @@ describe('runWizard — non-interactive init', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      fetchDesktop: NO_FETCH,
       runInteract: () => 127,
       prompt: vi.fn(),
       interactive: false,
@@ -185,6 +193,7 @@ describe('runWizard — non-interactive init', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      fetchDesktop: NO_FETCH,
       runInteract: () => 127,
       prompt: vi.fn(),
       interactive: false,
@@ -211,6 +220,7 @@ describe('runWizard — non-interactive init', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      fetchDesktop: NO_FETCH,
       runInteract: () => 127,
       prompt: vi.fn(),
       interactive: false,
@@ -294,6 +304,7 @@ describe('runWizard — integrations', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      fetchDesktop: NO_FETCH,
       runInteract: () => 127,
       prompt: vi.fn(),
       interactive: false,
@@ -317,6 +328,7 @@ describe('runWizard — interactive', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      fetchDesktop: NO_FETCH,
       runInteract: () => 127,
       prompt,
       interactive: true,
@@ -342,6 +354,7 @@ describe('runWizard — interactive', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      fetchDesktop: NO_FETCH,
       runInteract: () => 127,
       prompt,
       interactive: true,
@@ -363,6 +376,7 @@ describe('runWizard — interactive', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      fetchDesktop: NO_FETCH,
       runInteract: () => 127,
       prompt,
       interactive: true,
@@ -407,6 +421,7 @@ describe('runWizard — interactive', () => {
       installDsh: scriptedInstall().installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      fetchDesktop: NO_FETCH,
       runInteract: () => 127,
       prompt,
       interactive: true,
@@ -579,6 +594,7 @@ describe('runWizard — registry pick and install streaming', () => {
       installDsh,
       probeRegistry: async url => latencies.get(url),
       fetchModels: NO_MODELS,
+      fetchDesktop: NO_FETCH,
       runInteract: () => 127,
       prompt,
       interactive: true,
@@ -612,6 +628,7 @@ describe('runWizard — registry pick and install streaming', () => {
       installDsh,
       probeRegistry: NO_PROBE,
       fetchModels: NO_MODELS,
+      fetchDesktop: NO_FETCH,
       runInteract: () => 127,
       prompt,
       interactive: true,
@@ -1227,6 +1244,89 @@ describe('runWizard — marketplace and manage', () => {
     expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', '@deepseek-harness-tui/dsh-tui'] })
     expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-doublecheck'] })
     expect(lines.join('\n')).toContain('dsh --profile dzcf')
+  })
+})
+
+describe('runWizard — app surface (DSH Desktop installer)', () => {
+  /** Scripted fetch answering the cn HEAD resolve and the installer GET. */
+  const scriptedDesktopFetch = (): { fetch: typeof fetch; savedName: string } => {
+    const savedName = 'DSH.Desktop-9.9.9-universal.dmg'
+    const impl = (async (url: string, init?: { method?: string }) => {
+      if (init?.method === 'HEAD') {
+        return new Response(null, { status: 200, headers: { 'content-length': '21', 'content-disposition': `attachment; filename="${savedName}"` } })
+      }
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('desktop installer'))
+          controller.close()
+        },
+      }), { status: 200, headers: { 'content-length': '17' } })
+    }) as typeof fetch
+    return { fetch: impl, savedName }
+  }
+
+  afterEach(() => {
+    delete process.env.DZCF_DESKTOP_DIR
+  })
+
+  it('creates a web-composed profile and explains the missing installer on unsupported platforms', async () => {
+    const home = await tempHome()
+    const { run, calls } = scriptedRun()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'init', key: 'sk-app-0001', mode: 'app', yes: true,
+    })
+    expect(code).toBe(0)
+    // The desktop shell is no longer an npm plugin: the profile mounts the web
+    // composition that DSH Desktop's tray can pick.
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', '@deepseek-ai/dsh-web-app@^0.1.0-rc.6'] })
+    expect(calls).not.toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'add', '-w', 'dsh-desktop-app@^0.4.0'] })
+    if (detectDesktopPlatform() === 'none') {
+      expect(lines.join('\n')).toContain('没有 DSH Desktop 安装包')
+      expect(lines.join('\n')).toContain('dsh web')
+    }
+  })
+
+  it('plans the installer download under --dry-run with an explicit platform', async () => {
+    const home = await tempHome()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'init', key: 'sk-app-0002', mode: 'app', dryRun: true, desktopPlatform: 'mac',
+    })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('下载 DSH Desktop 安装包（mac，来源 cn）')
+  })
+
+  it('downloads the installer when --desktop-platform points at a supported machine', async () => {
+    const home = await tempHome()
+    const downloadDir = await tempHome()
+    process.env.DZCF_DESKTOP_DIR = downloadDir
+    const scripted = scriptedDesktopFetch()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, fetchDesktop: scripted.fetch, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'init', key: 'sk-app-0003', mode: 'app', yes: true, desktopPlatform: 'mac',
+    })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('安装包已保存')
+    const saved = join(downloadDir, scripted.savedName)
+    expect(await readFile(saved, 'utf8')).toBe('desktop installer')
+    // The onboarding points at the saved installer.
+    expect(lines.join('\n')).toContain(scripted.savedName)
+  })
+
+  it('skips the download when the interactive confirm is declined', async () => {
+    const home = await tempHome()
+    const downloadDir = await tempHome()
+    process.env.DZCF_DESKTOP_DIR = downloadDir
+    const scripted = scriptedDesktopFetch()
+    const { prompt } = scriptedPrompt({ baseUrl: '', key: 'sk-app-0004', modelManual: '', mode: 'app', plugins: [], proceed: true, download: false })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, prompt, interactive: true, fetchDesktop: scripted.fetch, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'init', desktopPlatform: 'mac',
+    })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('已跳过下载')
+    await expect(stat(join(downloadDir, scripted.savedName))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 })
 

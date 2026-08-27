@@ -40,6 +40,10 @@ export interface DzcfOptions {
   mcpCommand?: string
   /** npm registry for the dsh install (`--registry https://…`). */
   registry?: string
+  /** DSH Desktop installer source (`--desktop-source cn|github`). */
+  desktopSource?: 'cn' | 'github'
+  /** DSH Desktop installer platform override (`--desktop-platform mac|win`); also fetches installers for another machine. */
+  desktopPlatform?: 'mac' | 'win'
   /** Active interface language. */
   lang: Lang
   /** Assume yes for confirmations (`--yes`). */
@@ -113,6 +117,8 @@ export function parseDzcfArgs(argv: readonly string[], version: string): DzcfOpt
     .option('--plugin <list>', 'recommended plugins: comma-separated npm names (dsh-lens,dsh-spend)')
     .option('--mcp-command <command>', 'MCP server launch command')
     .option('--registry <url>', 'npm registry for the dsh install (http(s) URL; interactive runs also probe and offer one)')
+    .option('--desktop-source <source>', 'DSH Desktop installer source: cn (dshdesktop.cn, default) or github')
+    .option('--desktop-platform <platform>', 'DSH Desktop installer platform: mac or win (default: this machine; overrides let a Linux box fetch installers for other machines)')
     .option('-l, --lang <lang>', 'interface language: zh-CN or en', 'zh-CN')
     .option('-y, --yes', 'assume yes for install and overwrite confirmations')
     .option('--dry-run', 'report planned actions and write nothing')
@@ -138,12 +144,27 @@ export function parseDzcfArgs(argv: readonly string[], version: string): DzcfOpt
     plugin?: string
     mcpCommand?: string
     registry?: string
+    desktopSource?: string
+    desktopPlatform?: string
     lang: string
     yes?: boolean
     dryRun?: boolean
   }>()
   yes = options.yes ?? false
   dryRun = options.dryRun ?? false
+
+  const DESKTOP_SOURCES: readonly string[] = ['cn', 'github']
+  const DESKTOP_PLATFORMS: readonly string[] = ['mac', 'win']
+  if (options.desktopSource !== undefined) {
+    if (!DESKTOP_SOURCES.includes(options.desktopSource)) {
+      throw new CommanderError(1, 'dsh-zcf.desktopSource', `--desktop-source must be one of: ${DESKTOP_SOURCES.join(', ')}`)
+    }
+  }
+  if (options.desktopPlatform !== undefined) {
+    if (!DESKTOP_PLATFORMS.includes(options.desktopPlatform)) {
+      throw new CommanderError(1, 'dsh-zcf.desktopPlatform', `--desktop-platform must be one of: ${DESKTOP_PLATFORMS.join(', ')}`)
+    }
+  }
 
   if (options.mode !== undefined) {
     if (!MODES.includes(options.mode)) {
@@ -184,6 +205,8 @@ export function parseDzcfArgs(argv: readonly string[], version: string): DzcfOpt
     plugins: pluginList,
     ...(options.mcpCommand === undefined ? {} : { mcpCommand: options.mcpCommand }),
     ...(options.registry === undefined ? {} : { registry: options.registry }),
+    ...(options.desktopSource === undefined ? {} : { desktopSource: options.desktopSource as 'cn' | 'github' }),
+    ...(options.desktopPlatform === undefined ? {} : { desktopPlatform: options.desktopPlatform as 'mac' | 'win' }),
     lang,
     yes,
     dryRun,

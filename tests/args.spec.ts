@@ -50,6 +50,17 @@ describe('parseDzcfArgs', () => {
     })
   })
 
+  it('collects the DSH Desktop source and platform picks', () => {
+    const options = parse(['i', '--mode', 'app', '--desktop-source', 'github', '--desktop-platform', 'win'])
+    expect(options.desktopSource).toBe('github')
+    expect(options.desktopPlatform).toBe('win')
+  })
+
+  it('rejects an unknown desktop source or platform with exit code 1', () => {
+    expect(exitCode(['--desktop-source', 'ftp'])).toBe(1)
+    expect(exitCode(['--desktop-platform', 'linux'])).toBe(1)
+  })
+
   it('deduplicates the --with list', () => {
     expect(parse(['i', '--with', 'exa,terminal,exa']).with).toEqual(['exa', 'terminal'])
   })

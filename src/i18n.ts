@@ -240,8 +240,8 @@ export const MESSAGES: MessageTable = {
     'en': 'web — browser UI (`dsh web`, default http://127.0.0.1:3080)',
   },
   modeApp: {
-    'zh-CN': 'app — 桌面应用壳（Tauri 2，macOS/Windows；Linux 建议选 tui 或 web）',
-    'en': 'app — desktop shell (Tauri 2, macOS/Windows; on Linux prefer tui or web)',
+    'zh-CN': 'app — DSH Desktop 桌面客户端（anywhere-labs 的 Electron 应用，macOS/Windows；向导自动下载安装包并引导）',
+    'en': 'app — DSH Desktop client (the anywhere-labs Electron app, macOS/Windows; the wizard downloads the installer and guides you)',
   },
   missingKey: {
     'zh-CN': '缺少 API Key：请用 `--key sk-…` 传入，或在交互模式下输入。',
@@ -303,6 +303,46 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '✓ 一切就绪！上手指引：',
     'en': '✓ All set! Getting started:',
   },
+  desktopNoInstaller: {
+    'zh-CN': '当前平台没有 DSH Desktop 安装包（仅提供 macOS Universal 与 Windows x64）。已按 web 组合准备好 profile，本机可用 `dsh web`；需要 `--desktop-platform mac|win` 为其它机器代下安装包。',
+    'en': 'No DSH Desktop installer for this platform (macOS Universal and Windows x64 only). The profile is composed for the web surface, so `dsh web` works here; pass `--desktop-platform mac|win` to fetch an installer for another machine.',
+  },
+  planDesktopInstaller: {
+    'zh-CN': '下载 DSH Desktop 安装包（{platform}，来源 {source}）',
+    'en': 'download the DSH Desktop installer ({platform}, source {source})',
+  },
+  desktopSourceFallback: {
+    'zh-CN': '官网下载入口不可用（{reason}），改用 GitHub Release……',
+    'en': 'The project download endpoint is unreachable ({reason}); falling back to the GitHub release…',
+  },
+  desktopResolveFailed: {
+    'zh-CN': '× 无法解析 DSH Desktop 安装包地址：{reason}',
+    'en': '× Could not resolve a DSH Desktop installer: {reason}',
+  },
+  desktopDownloadAsk: {
+    'zh-CN': '下载 DSH Desktop 安装包到 ~/Downloads 吗？{file}，约 {size}MB',
+    'en': 'Download the DSH Desktop installer into ~/Downloads? {file}, about {size} MB',
+  },
+  desktopDownloadSkipped: {
+    'zh-CN': '已跳过下载；之后可重跑向导或自行到 https://www.dshdesktop.cn 下载。',
+    'en': 'Skipped the download; rerun the wizard later or fetch it yourself from https://www.dshdesktop.cn.',
+  },
+  desktopDownloading: {
+    'zh-CN': '正在下载 {file}（约 {size}MB）……',
+    'en': 'Downloading {file} (about {size} MB)…',
+  },
+  desktopProgress: {
+    'zh-CN': '  ↓ 已下载 {received}MB / {total}MB{percent}',
+    'en': '  ↓ downloaded {received} MB / {total} MB{percent}',
+  },
+  desktopDownloaded: {
+    'zh-CN': '✓ 安装包已保存：{path}',
+    'en': '✓ Installer saved: {path}',
+  },
+  desktopDownloadFailed: {
+    'zh-CN': '× 下载失败：{reason}（可重跑向导重试，或到 https://www.dshdesktop.cn 手动下载）',
+    'en': '× Download failed: {reason} (rerun the wizard to retry, or download manually from https://www.dshdesktop.cn)',
+  },
   onboardingProfileBridge: {
     'zh-CN': '（本次选择的运行形态已保存为 profile：{profile}——下面的启动命令都基于它）',
     'en': '(The surface you picked is saved as the profile: {profile} — the launch commands below all use it)',
@@ -363,9 +403,13 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '启动 Web 界面：`dsh web`，然后浏览器打开 http://127.0.0.1:3080',
     'en': 'Launch the web UI: `dsh web`, then open http://127.0.0.1:3080',
   },
-  onboardingLaunchApp: {
-    'zh-CN': '启动桌面壳：`dsh --profile {profile}`（按 dsh-desktop-app 的说明）',
-    'en': 'Launch the desktop shell: `dsh --profile {profile}` (per dsh-desktop-app instructions)',
+  onboardingLaunchDesktop: {
+    'zh-CN': '安装 DSH Desktop：打开下载的安装包（DMG 拖入 Applications / NSIS 按提示安装），首启自动就绪——本向导写入的凭据与 profile 在同一 DSH 主目录，打开即可对话。安装包位置：{path}（托盘常驻；「退出」才会结束应用和后台服务）',
+    'en': 'Install DSH Desktop: open the downloaded installer (drag the DMG into Applications / follow the NSIS prompts); the first launch sets itself up — the credentials and profile this wizard wrote share the same DSH home, so you can chat right away. Installer at: {path} (tray-resident; only Quit ends the app and its host)',
+  },
+  onboardingLaunchDesktopNone: {
+    'zh-CN': '本机暂无 DSH Desktop 安装包（仅 macOS Universal 与 Windows x64）：可直接 `dsh web` 使用网页版，或把 profile `{profile}` 带到 mac/Windows 机器上配合 DSH Desktop。',
+    'en': 'No DSH Desktop installer for this machine (macOS Universal and Windows x64 only): use `dsh web` here, or take profile `{profile}` to a mac/Windows machine with DSH Desktop.',
   },
   onboardingFirstRun: {
     'zh-CN': '首次启动直接对话即可；',
@@ -546,14 +590,6 @@ export const MESSAGES: MessageTable = {
   pluginRemoveFailed: {
     'zh-CN': '移除 {plugin} 失败：{stderr}',
     'en': 'Removing {plugin} failed: {stderr}',
-  },
-  nextStepsTui: {
-    'zh-CN': 'dsh --profile {profile}（终端 UI）',
-    'en': 'dsh --profile {profile} (terminal UI)',
-  },
-  nextStepsApp: {
-    'zh-CN': 'dsh --profile {profile}（按 dsh-desktop-app 的说明启动桌面壳）',
-    'en': 'dsh --profile {profile} (launch the desktop shell per dsh-desktop-app instructions)',
   },
 } as const
 

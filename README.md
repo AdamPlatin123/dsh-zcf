@@ -44,10 +44,11 @@ dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
 ## What it does
 
 1. **Detects `dsh`** (`dsh -V`). Missing? The wizard states the cost up front (`@deepseek-ai/dsh` is a full distribution: 60+ sub-packages and hundreds of dependencies; roughly 5–15 minutes from the official registry, 1–2 from a mirror), measures the round-trip latency of the official registry and the Aliyun mirror in interactive mode and lists the faster one first, and streams installer output line by line with an elapsed-time report. `--registry <url>` pins the registry without probing; non-interactive runs keep the package manager's own registry and never switch silently. `--yes` skips the question; a run without a package manager fails loud.
-2. **Collects inputs** — the DeepSeek API key (masked prompt), an optional `DEEPSEEK_BASE_URL` override, and the runtime surface: `tui` (Claude Code-style terminal UI), `web` (browser UI), or `app` (Tauri 2 desktop shell, macOS/Windows). Interactive mode asks; non-interactive mode requires `--key` and `--mode` and fails loud otherwise.
+2. **Collects inputs** — the DeepSeek API key (masked prompt), an optional `DEEPSEEK_BASE_URL` override, and the runtime surface: `tui` (Claude Code-style terminal UI), `web` (browser UI), or `app` (the DSH Desktop client from anywhere-labs: the wizard downloads the platform installer into `~/Downloads` and guides the install; macOS Universal and Windows x64 only, other platforms fall back to the web composition). Interactive mode asks; non-interactive mode requires `--key` and `--mode` and fails loud otherwise.
 3. **Stores credentials** in `$DSH_HOME/.credentials.yaml` — the managed, owner-only (0600 under 0700) document that `dsh-credentials-local` reads. Existing untouched entries survive; writes re-read under the cross-process writer lock and commit atomically. Keys are never echoed: the summary masks them (`sk-***4321`).
 4. **Verifies the profile** with `dsh --profile <mode> --dump-default-config` — the shipped `web`/`headless` profiles auto-initialize on first boot, so a successful dump proves the zero-config loop without a model call. Failures report the dsh stderr; the stored credentials remain.
-5. **Prints next steps** — `dsh web`, or `dsh --profile dzcf` for tui/app surfaces (default profile name dzcf; override with `--profile`).
+5. **Downloads and guides** (app surface) — resolves the DSH Desktop installer (dshdesktop.cn by default, `--desktop-source github` to switch; the GitHub source carries a sha256 verify) and streams it into `~/Downloads` with progress; `--desktop-platform mac|win` fetches for another machine. Platforms without an installer (Linux, Windows on ARM) are told so and continue, with the onboarding pointing at `dsh web`.
+6. **Prints next steps** — `dsh web`, or `dsh --profile dzcf` for the tui surface (default profile name dzcf; override with `--profile`); the app surface prints the installer location and the DSH Desktop first-launch guide (credentials and profile share the same DSH home, so it works right after the install).
 
 Nothing else is touched: no profile files are rewritten, no `cordis.yml` is generated, and the wizard itself never calls a model API.
 
@@ -66,6 +67,8 @@ Nothing else is touched: no profile files are rewritten, no `cordis.yml` is gene
 | `--base-url <url>` | Endpoint override; any http(s) URL, else exit 1. |
 | `--model <id>` | Pin this model id into the profile's model catalog (interactive flows also list the upstream `GET /models` result). |
 | `-m, --mode <mode>` | `tui`, `web`, or `app`; skip the list prompt. |
+| `--desktop-source <source>` | DSH Desktop installer source: `cn` (dshdesktop.cn, default) or `github`. |
+| `--desktop-platform <platform>` | DSH Desktop installer platform: `mac` or `win`; defaults to this machine, and can fetch installers for another one. |
 | `-l, --lang <lang>` | Interface language: `zh-CN` (default) or `en`. |
 | `-y, --yes` | Assume yes for the install and write confirmations. |
 | `-p, --profile <name>` | Custom profile name for integration options. |

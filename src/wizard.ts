@@ -22,6 +22,7 @@ import { detectPackageManager, dshAvailable, installDshArgs, REGISTRY_OPTIONS } 
 import { ensureHomeDirectory, maskKey, migrateCredentialsIfNeeded, needsV1Migration, readCredentials, writeCredentials } from './credentials.ts'
 import { writeEnvFile } from './dotenv.ts'
 import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, readDefaultProfile, removePlugin, setPnpmBinOverride, writeDefaultProfile, writeProfileNpmrc } from './profile.ts'
+import { detectDesktopPlatform, desktopDownloadDir, downloadDesktopInstaller, resolveDesktopAsset, type FetchLike } from './desktop.ts'
 
 /** Everything the wizard touches that an environment can provide. */
 export interface WizardContext {
@@ -37,6 +38,8 @@ export interface WizardContext {
   probeRegistry: (url: string) => Promise<number | undefined>
   /** Upstream `GET /models` listing; undefined when the endpoint does not answer. */
   fetchModels: (baseUrl: string, key: string) => Promise<readonly string[] | undefined>
+  /** Network fetch for DSH Desktop installer resolution and download. */
+  fetchDesktop: FetchLike
   /** Interactive launcher run with the terminal attached; returns the exit code. */
   runInteract: (command: string, args: readonly string[]) => number
   /** Interactive prompt implementation. */
@@ -60,12 +63,14 @@ interface IntegrationPlan {
 type T = (key: string, params?: Readonly<Record<string, string>>) => string
 
 /** The post-init onboarding block: launch, first run, daily management, docs. */
-function onboardingBlock(surface: Surface, profile: string, model: string | undefined, t: T, shortcutReady: boolean): string {
+function onboardingBlock(surface: Surface, profile: string, model: string | undefined, t: T, shortcutReady: boolean, installerPath?: string): string {
   const launch = surface === 'web'
     ? t('onboardingLaunchWeb')
     : surface === 'tui'
       ? (shortcutReady ? t('onboardingLaunchTuiShortcut') : t('onboardingLaunchTui', { profile }))
-      : t('onboardingLaunchApp', { profile })
+      : installerPath === undefined
+        ? t('onboardingLaunchDesktopNone', { profile })
+        : t('onboardingLaunchDesktop', { path: installerPath })
   return [
     t('onboardingTitle'),
     t('onboardingProfileBridge', { profile }),
@@ -492,6 +497,68 @@ function keyCredentialRefs(stored: Record<string, string>): string[] {
 
 /** Sentinel picker value for "skip the stored credentials and type a new key". */
 const KEY_REENTER = '__NEW__'
+
+/**
+ * Acquire the DSH Desktop installer for the app surface: detect the platform
+ * (or honor `--desktop-platform`, which also serves cross-machine fetches),
+ * confirm interactively, resolve from the chosen source (falling back to
+ * GitHub when the project CDN is unreachable), and stream the file into
+ * ~/Downloads with progress. A platform without an installer is not an
+ * error — the wizard says so and the flow continues on the web composition.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param options - resolved command-line options.
+ * @returns the saved installer path, or undefined when nothing was downloaded.
+ */
+async function acquireDesktopInstaller(context: WizardContext, t: T, options: DzcfOptions): Promise<string | undefined> {
+  const { out, err } = context
+  const platform = detectDesktopPlatform(options.desktopPlatform)
+  if (platform === 'none') {
+    out(t('desktopNoInstaller'))
+    return undefined
+  }
+  const source = options.desktopSource ?? 'cn'
+  let asset
+  try {
+    asset = await resolveDesktopAsset(source, platform, context.fetchDesktop)
+  } catch (error) {
+    if (source !== 'cn') {
+      err(t('desktopResolveFailed', { reason: (error as Error).message }))
+      return undefined
+    }
+    out(t('desktopSourceFallback', { reason: (error as Error).message }))
+    try {
+      asset = await resolveDesktopAsset('github', platform, context.fetchDesktop)
+    } catch (fallbackError) {
+      err(t('desktopResolveFailed', { reason: (fallbackError as Error).message }))
+      return undefined
+    }
+  }
+  if (context.interactive && !options.yes) {
+    const outcome = await askOne(context.prompt, { type: 'confirm', name: 'download', message: t('desktopDownloadAsk', { file: asset.fileName, size: String(mergesOrQuestion(asset.size)) }), default: true })
+    if (outcome.status === 'cancelled' || outcome.value.download !== true) {
+      out(t('desktopDownloadSkipped'))
+      return undefined
+    }
+  }
+  out(t('desktopDownloading', { file: asset.fileName, size: String(mergesOrQuestion(asset.size)) }))
+  try {
+    const saved = await downloadDesktopInstaller(asset, desktopDownloadDir(), progress => {
+      const percent = progress.total === undefined ? '' : `（${Math.floor((progress.received / progress.total) * 100)}%）`
+      out(t('desktopProgress', { received: String(Math.round(progress.received / 1048576)), total: mergesOrQuestion(progress.total), percent }))
+    }, context.fetchDesktop)
+    out(t('desktopDownloaded', { path: saved }))
+    return saved
+  } catch (error) {
+    err(t('desktopDownloadFailed', { reason: (error as Error).message }))
+    return undefined
+  }
+}
+
+/** Megabytes, or a question mark when the size is unknown upfront. */
+function mergesOrQuestion(bytes: number | undefined): string {
+  return bytes === undefined ? '?' : String(Math.round(bytes / 1048576))
+}
 
 /**
  * One key step shared by init and the credentials flow: offer the stored key
@@ -1035,6 +1102,12 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
   if (options.dryRun) {
     out(t('dryRunNotice'))
     for (const line of initPlanLines({ key, baseUrl, surface, profile, plugins, model: collected.state.model, t })) out(`  - ${line}`)
+    if (surface === 'app') {
+      const platform = detectDesktopPlatform(options.desktopPlatform)
+      out(platform === 'none'
+        ? `  - ${t('desktopNoInstaller')}`
+        : `  - ${t('planDesktopInstaller', { platform, source: options.desktopSource ?? 'cn' })}`)
+    }
     return 0
   }
 
@@ -1065,9 +1138,17 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
   }
   out(t('verified', { mode: profile }))
 
+  // The app surface hands the desktop shell to the standalone DSH Desktop
+  // installer; credentials and the web-composed profile above are what the
+  // app reads from the shared DSH home once installed.
+  let installerPath: string | undefined
+  if (surface === 'app') {
+    installerPath = await acquireDesktopInstaller(context, t, options)
+  }
+
   out('')
   const shortcutReady = await ensureGlobalShortcut(context, t, options)
-  out(onboardingBlock(surface, profile, collected.state.model, t, shortcutReady))
+  out(onboardingBlock(surface, profile, collected.state.model, t, shortcutReady, installerPath))
   return 0
 }
 

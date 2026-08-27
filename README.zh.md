@@ -45,10 +45,11 @@ dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
 ## 它做什么
 
 1. **检测 `dsh`**（`dsh -V`）。不存在？向导先预告体量（`@deepseek-ai/dsh` 是完整发行版：60+ 个子包、数百个依赖，官方源约 5–15 分钟、镜像源约 1–2 分钟），交互模式实测官方源与阿里云镜像的往返延迟并把快的一方排在首位供选择；`--registry <url>` 显式指定安装源（跳过探测），非交互模式默认包管理器自己的源、绝不静默切换。安装过程逐行实时转发输出并报告耗时；`--yes` 跳过询问，没有可用包管理器则报错退出。
-2. **收集输入**——DeepSeek API Key（掩码输入）、可选的 `DEEPSEEK_BASE_URL` 覆盖，以及运行形态：`tui` 终端 UI（Claude Code 风格）、`web` 浏览器 UI、或 `app` 桌面应用壳（Tauri 2，macOS/Windows）。交互模式逐项询问；非交互模式必须有 `--key` 和 `--mode`，缺失即报错退出。
+2. **收集输入**——DeepSeek API Key（掩码输入）、可选的 `DEEPSEEK_BASE_URL` 覆盖，以及运行形态：`tui` 终端 UI（Claude Code 风格）、`web` 浏览器 UI、或 `app` DSH Desktop 桌面客户端（anywhere-labs 的 Electron 应用：向导按平台自动下载安装包到 `~/Downloads` 并引导安装；仅 macOS Universal 与 Windows x64 有安装包，其它平台自动落回 web 组合）。交互模式逐项询问；非交互模式必须有 `--key` 和 `--mode`，缺失即报错退出。
 3. **写入凭据**到 `$DSH_HOME/.credentials.yaml`——`dsh-credentials-local` 读取的受管文档，仅属主可读写（0700 目录下的 0600 文件）。未涉及的既有条目原样保留；写入在跨进程写锁内先重读再原子提交。Key 绝不回显：摘要里始终是掩码（`sk-***4321`）。
 4. **验证 profile**：执行 `dsh --profile <mode> --dump-default-config`——内置的 `web`/`headless` profile 首次启动会自动初始化，所以一次成功的 dump 就能证明零配置闭环，无需任何模型调用。失败时输出 dsh 的 stderr；已写入的凭据保留。
-5. **打印下一步**——`dsh web`，或 `dsh --profile dzcf`（tui/app 形态；profile 默认名 dzcf，可用 `--profile` 改）。
+5. **下载与引导**（app 形态）——解析 DSH Desktop 安装包（默认 dshdesktop.cn 源，`--desktop-source github` 可切换；GitHub 源带 sha256 校验），带进度下载到 `~/Downloads`；`--desktop-platform mac|win` 可为其它机器代下。无安装包的平台（Linux、Windows on ARM）说明后继续，onboarding 指向 `dsh web`。
+6. **打印下一步**——`dsh web`，或 `dsh --profile dzcf`（tui 形态；profile 默认名 dzcf，可用 `--profile` 改）；app 形态打印安装包位置与 DSH Desktop 首启指引（凭据与 profile 同一 DSH 主目录，装好即用）。
 
 除此之外不碰任何东西：不重写 profile 文件、不生成 `cordis.yml`，向导自身也从不调用模型 API。
 
@@ -67,6 +68,8 @@ dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
 | `--base-url <url>` | 端点覆盖；必须是 http(s) 地址，否则退出码 1。 |
 | `--model <id>` | 将该模型 id 固定进 profile 的模型目录（交互流程还会列出上游 `GET /models` 结果供选择）。 |
 | `-m, --mode <mode>` | `tui`、`web` 或 `app`；跳过列表选择。 |
+| `--desktop-source <source>` | DSH Desktop 安装包来源：`cn`（dshdesktop.cn，默认）或 `github`。 |
+| `--desktop-platform <platform>` | DSH Desktop 安装包平台：`mac` 或 `win`；默认跟随本机，也可为其它机器代下。 |
 | `-l, --lang <lang>` | 界面语言：`zh-CN`（默认）或 `en`。 |
 | `-y, --yes` | 对安装与写入确认一律视为同意。 |
 | `-p, --profile <name>` | 集成选项所用的自定义 profile 名称。 |

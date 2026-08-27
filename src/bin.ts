@@ -37,6 +37,7 @@ const main = async (): Promise<void> => {
     installDsh: (pm, args, onLine) => installDshStreaming(pm, args, onLine),
     probeRegistry: probeRegistryLatency,
     fetchModels: fetchUpstreamModels,
+    fetchDesktop: fetch,
     runInteract: runInteractive,
     prompt: createPromptPort(),
     interactive: process.stdin.isTTY && process.stdout.isTTY,
