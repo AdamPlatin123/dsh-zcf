@@ -53,6 +53,15 @@ dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
 
 除此之外不碰任何东西：不重写 profile 文件、不生成 `cordis.yml`，向导自身也从不调用模型 API。
 
+### 老用户保护（0.5.4 起）
+
+在已有配置的机器上重跑向导时：
+
+- **合并语义**（默认，无覆盖）：凭据按条目合并——其它供应商的条目原样保留；profile 插件只增不减；模型目录按行 upsert。向导会先声明这两点再动手。
+- **自动备份**：首次改动前把 `.credentials.yaml` 与 profile 的 `package.json`/`.npmrc`/`cordis.patch.yml` 快照到 `~/.dsh/.zcf/backups/<时间戳>-<profile>/`（目录内有 RESTORE.md 逐步恢复说明，自动保留最近 5 份）。交互模式在此有一道「继续吗」确认；全新机器不触发。
+- **其它启动命令**：每个 profile 都能独立启动——`dsh --profile <名字>`；onboarding 会列出本机其它已有 profile 的启动命令。若检测到其它来源的 `dsh-tui` 命令（TUI 项目自带同名命令），向导不再误称「已全局就绪」，也不抢注该命令（避免 EEXIST 冲突）；zcf 的自愈启动器另挂 `dzcf-tui` 别名，始终可用。
+- **旧桌面形态迁移**：0.5.2 及以前 app 形态留下的 `dsh-desktop-app` 文档包会在重跑时自动移除。
+
 ## 参数
 
 | 参数 | 含义 |

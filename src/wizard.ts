@@ -8,7 +8,7 @@
  */
 
 import { tmpdir } from 'node:os'
-import { rm } from 'node:fs/promises'
+import { readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { dshHomeDisplay } from '@deepseek-ai/dsh-home-paths'
 import { renderBanner, renderMenuLines, type MenuAction } from './banner.ts'
@@ -23,6 +23,7 @@ import { ensureHomeDirectory, maskKey, migrateCredentialsIfNeeded, needsV1Migrat
 import { writeEnvFile } from './dotenv.ts'
 import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, readDefaultProfile, removePlugin, setPnpmBinOverride, writeDefaultProfile, writeProfileNpmrc } from './profile.ts'
 import { detectDesktopPlatform, desktopDownloadDir, downloadDesktopInstaller, resolveDesktopAsset, type FetchLike } from './desktop.ts'
+import { backupExistingState } from './backup.ts'
 
 /** Everything the wizard touches that an environment can provide. */
 export interface WizardContext {
@@ -90,7 +91,20 @@ function globalShortcutReady(run: RunFn): boolean {
   const probe = run('bash', ['-lc', 'command -v dsh-tui || true'])
   if (probe.status !== 0) return false
   const found = probe.stdout.trim()
-  return found !== '' && !found.includes('_npx')
+  if (found === '' || found.includes('_npx')) return false
+  // The bin must belong to the global dsh-zcf install. A foreign `dsh-tui`
+  // (the TUI project ships its own command) would silently bypass the
+  // preflight launcher this wizard promises, so it must not count as ready.
+  const real = run('bash', ['-lc', `readlink -f "${found}" || true`])
+  const resolved = real.status === 0 ? real.stdout.trim() : ''
+  return resolved !== '' && resolved.includes('dsh-zcf')
+}
+
+/** Whether a `dsh-tui` command exists that this wizard did not install. */
+function foreignDshTuiPresent(run: RunFn): boolean {
+  const probe = run('bash', ['-lc', 'command -v dsh-tui || true'])
+  const found = probe.status === 0 ? probe.stdout.trim() : ''
+  return found !== '' && !found.includes('_npx') && !globalShortcutReady(run)
 }
 
 /**
@@ -103,9 +117,16 @@ function globalShortcutReady(run: RunFn): boolean {
  * @param options - resolved command-line options.
  * @returns true when `dsh-tui` is (now) globally available.
  */
-async function ensureGlobalShortcut(context: WizardContext, t: T, options: DzcfOptions): Promise<boolean> {
+async function ensureGlobalShortcut(context: WizardContext, t: T, options: DzcfOptions, surface: Surface): Promise<boolean> {
   const { run, out } = context
   if (globalShortcutReady(run)) return true
+  if (foreignDshTuiPresent(run)) {
+    // npm would refuse the install outright (bin EEXIST); the wizard's own
+    // launcher stays reachable through dzcf-tui and the profile command.
+    // The notice is tui-only: web and app runs never need the shortcut.
+    if (surface === 'tui') out(t('shortcutForeign'))
+    return false
+  }
   const args = ['install', '--global', `dsh-zcf@${options.selfVersion}`, ...(options.registry === undefined ? [] : [`--registry=${options.registry}`])]
   if (options.dryRun) return false
   if (context.interactive && !options.yes) {
@@ -156,7 +177,7 @@ type RegistryChoice = { status: 'picked'; registry: string | undefined } | { sta
 
 /**
  * Resolve the registry for the dsh install. An explicit `--registry` wins
- * without probing; interactive runs measure both candidates and ask, fastest
+ * without probing; interactive runs measure every candidate and ask, fastest
  * first; non-interactive runs stay on the package manager's default rather
  * than switching registries on the user's behalf.
  */
@@ -181,7 +202,7 @@ async function pickRegistry(context: WizardContext, t: T, options: DzcfOptions):
   }
   const choiceLabel = (probe: (typeof probes)[number]): string => {
     const ms = probe.ms === undefined ? t('registryUnreachable') : `${probe.ms}ms`
-    return t(probe.option.id === 'official' ? 'registryOfficial' : 'registryMirror', { ms })
+    return t(probe.option.labelKey, { ms })
   }
   const outcome = await askOne(context.prompt, {
     type: 'list',
@@ -553,6 +574,49 @@ async function acquireDesktopInstaller(context: WizardContext, t: T, options: Dz
     err(t('desktopDownloadFailed', { reason: (error as Error).message }))
     return undefined
   }
+}
+
+/**
+ * Existing-user protection: before the wizard's first mutation of a machine
+ * that already carries state, snapshot the configuration files about to
+ * change (merge stays the mutation semantics; the backup makes trying it
+ * free), say what merge will preserve, and give the interactive user one
+ * clear continue point.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param options - resolved command-line options.
+ * @param profile - the profile the wizard is about to touch.
+ * @returns true to continue (including fresh machines with nothing to snapshot).
+ */
+async function protectExistingState(context: WizardContext, t: T, options: DzcfOptions, profile: string): Promise<boolean> {
+  const { home, out } = context
+  let stored: Record<string, string> = {}
+  try {
+    stored = readCredentials(home)
+  } catch {
+    stored = {}
+  }
+  const foreignRefs = Object.keys(stored).filter(ref => ref !== API_KEY_REF && ref !== BASE_URL_REF && stored[ref] !== '').length
+  const bundles = listProfileBundles(home, profile) ?? []
+  let backup
+  try {
+    backup = await backupExistingState(home, profile)
+  } catch (error) {
+    out(t('protectBackupFailed', { reason: (error as Error).message }))
+    backup = { dir: undefined, lines: [] }
+  }
+  if (backup.dir === undefined && foreignRefs === 0 && bundles.length === 0) return true
+  out(t('protectHeader', { profile }))
+  out(t('protectMergeFacts', { foreignRefs: String(foreignRefs), plugins: String(bundles.length), list: bundles.join('、') }))
+  if (backup.dir !== undefined) out(t('protectBackupDone', { path: backup.dir }))
+  if (context.interactive && !options.yes) {
+    const outcome = await askOne(context.prompt, { type: 'confirm', name: 'keepGoing', message: t('protectConfirm'), default: true })
+    if (outcome.status === 'cancelled' || outcome.value.keepGoing !== true) {
+      out(t('protectAborted', { path: backup.dir ?? '' }))
+      return false
+    }
+  }
+  return true
 }
 
 /** Megabytes, or a question mark when the size is unknown upfront. */
@@ -1111,6 +1175,8 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
     return 0
   }
 
+  if (!await protectExistingState(context, t, options, profile)) return 0
+
   if (!await storeCredentials(context, t, home, key, baseUrl)) return 1
 
   // The registry decision must precede profile creation: the surface bundle
@@ -1118,6 +1184,13 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
   // as the plugin installs do.
   await ensureProfileRegistry(context, t, options, profile, plugins.length > 0 || listProfileBundles(home, profile) === undefined ? 1 : 0)
   await allowProfileBuilds(home, profile)
+  if (surface === 'app' && (listProfileBundles(home, profile) ?? []).includes('dsh-desktop-app')) {
+    // 0.5.2 and earlier app profiles carry the doc-only dsh-desktop-app
+    // bundle; the desktop shell moved to the standalone installer flow.
+    out(t('legacyDesktopBundleRemoving'))
+    const removed = removePlugin(context.run, profile, 'dsh-desktop-app')
+    if (removed.status !== 0) context.err(t('pluginRemoveFailed', { plugin: 'dsh-desktop-app', stderr: removed.stderr.trim() }))
+  }
   if (!await createProfileWithRecovery(context, t, options, surface, profile)) return 1
   out(t('profileCreated', { profile }))
   if (!await installPlugins(context, t, profile, plugins)) return 1
@@ -1147,9 +1220,26 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
   }
 
   out('')
-  const shortcutReady = await ensureGlobalShortcut(context, t, options)
+  const shortcutReady = await ensureGlobalShortcut(context, t, options, surface)
   out(onboardingBlock(surface, profile, collected.state.model, t, shortcutReady, installerPath))
+  const others = await listOtherProfiles(context.home, profile)
+  if (others.length > 0) out(t('onboardingOtherProfiles', { list: others.map(name => `dsh --profile ${name}`).join('；') }))
   return 0
+}
+
+/** Profile names besides the active one, for the launch-alternatives line. */
+async function listOtherProfiles(home: string, profile: string): Promise<readonly string[]> {
+  let entries
+  try {
+    entries = await readdir(join(home, 'profiles'), { withFileTypes: true })
+  } catch {
+    return []
+  }
+  return entries
+    .filter(entry => entry.isDirectory() && entry.name !== profile && entry.name !== 'node_modules')
+    .map(entry => entry.name)
+    .sort()
+    .slice(0, 3)
 }
 
 /** The marketplace flow: browse the curated picks and install into a profile. */
@@ -1481,15 +1571,16 @@ async function runCredentials(context: WizardContext, t: T, options: DzcfOptions
         }
         case 'model': {
           const answer = await askModel(context, t, baseUrl, key ?? '')
-          if (answer.status !== 'picked') {
-            out(t('modelSkipped'))
-            return 0
-          }
+          if (answer.status === 'cancelled') { steppedBack = true; break }
+          if (answer.status !== 'picked') { out(t('modelSkipped')); break }
           model = answer.model
           break
         }
         case 'proceed': {
-          out(t('summary', { lines: [`  - ${API_KEY_REF} = ${maskKey(key ?? '')}`, ...(model === undefined ? [] : [`  - model ${model}`])].join('\n') }))
+          const baseUrlLine = baseUrl !== ''
+            ? `  - ${BASE_URL_REF} = ${baseUrl}`
+            : (stored[BASE_URL_REF] !== undefined ? `  - ${BASE_URL_REF} = ${stored[BASE_URL_REF]}${t('keptHint')}` : '')
+          out(t('summary', { lines: [`  - ${API_KEY_REF} = ${maskKey(key ?? '')}`, ...(baseUrlLine === '' ? [] : [baseUrlLine]), ...(model === undefined ? [] : [`  - model ${model}`])].join('\n') }))
           const outcome = await askOne(context.prompt, { type: 'confirm', name: 'proceed', message: t('proceedConfirm'), default: true })
           if (outcome.status === 'cancelled') { steppedBack = true; break }
           if (outcome.value.proceed !== true) {

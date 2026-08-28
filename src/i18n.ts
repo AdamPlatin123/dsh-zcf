@@ -83,9 +83,13 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '官方源 registry.npmjs.org（{ms}）',
     'en': 'Official registry.npmjs.org ({ms})',
   },
-  registryMirror: {
+  registryAliyun: {
     'zh-CN': '阿里云镜像 registry.npmmirror.com（{ms}）',
     'en': 'Aliyun mirror registry.npmmirror.com ({ms})',
+  },
+  registryHuawei: {
+    'zh-CN': '华为云镜像 repo.huaweicloud.com（{ms}，全量同步）',
+    'en': 'Huawei mirror repo.huaweicloud.com ({ms}, full sync)',
   },
   registryUnreachable: {
     'zh-CN': '不可达',
@@ -96,8 +100,8 @@ export const MESSAGES: MessageTable = {
     'en': 'Using the configured registry: {registry}',
   },
   registryProbeNone: {
-    'zh-CN': '（两个安装源都未在 3 秒内应答，使用官方源安装）',
-    'en': '(Neither registry answered within 3 s; installing from the official one)',
+    'zh-CN': '（所有安装源都未在 3 秒内应答，使用官方源安装）',
+    'en': '(No registry answered within 3 s; installing from the official one)',
   },
   installElapsed: {
     'zh-CN': '安装耗时 {seconds} 秒',
@@ -302,6 +306,46 @@ export const MESSAGES: MessageTable = {
   onboardingTitle: {
     'zh-CN': '✓ 一切就绪！上手指引：',
     'en': '✓ All set! Getting started:',
+  },
+  protectHeader: {
+    'zh-CN': '检测到既有配置（profile：{profile}）——本次采用合并语义，不做覆盖：',
+    'en': 'Existing configuration detected (profile: {profile}) — this run merges, it never overwrites:',
+  },
+  protectMergeFacts: {
+    'zh-CN': '  - 凭据按条目合并：{foreignRefs} 个非 DeepSeek 条目原样保留；插件只增不减：现有 {plugins} 个{list}',
+    'en': '  - credentials merge per entry: {foreignRefs} non-DeepSeek entries stay; plugins only ever get added: {plugins} present{list}',
+  },
+  protectBackupDone: {
+    'zh-CN': '  - 已备份原配置：{path}（目录内有 RESTORE.md 恢复说明，最近 5 份自动保留）',
+    'en': '  - original configuration backed up: {path} (RESTORE.md inside explains recovery; the newest 5 snapshots are kept)',
+  },
+  protectBackupFailed: {
+    'zh-CN': '× 备份未能完成：{reason}（未做任何修改，已停止）',
+    'en': '× the backup could not be completed: {reason} (nothing was changed; stopped)',
+  },
+  protectConfirm: {
+    'zh-CN': '按上述合并语义继续吗？',
+    'en': 'Continue with the merge semantics above?',
+  },
+  protectAborted: {
+    'zh-CN': '已取消，未做任何修改。备份仍在：{path}',
+    'en': 'Cancelled; nothing was changed. The backup remains at {path}',
+  },
+  legacyDesktopBundleRemoving: {
+    'zh-CN': '正在移除旧版桌面文档包 dsh-desktop-app（0.5.3 起桌面壳改由 DSH Desktop 安装包提供）……',
+    'en': 'Removing the legacy dsh-desktop-app doc bundle (since 0.5.3 the desktop shell comes from the DSH Desktop installer)…',
+  },
+  shortcutForeign: {
+    'zh-CN': '检测到其它来源的 dsh-tui 命令：zcf 的自愈启动器不接管它（安装也会因命令名冲突失败）。可继续用 `dsh --profile <名字>` 启动任意 profile；如需 zcf 启动器，移除外来命令后重跑向导。',
+    'en': 'A foreign dsh-tui command is on PATH: the wizard\'s self-healing launcher will not take it over (an install would also fail on the name conflict). Launch any profile with `dsh --profile <name>`; to get the wizard\'s launcher, remove the foreign command and rerun.',
+  },
+  keptHint: {
+    'zh-CN': '（留空=保留此值）',
+    'en': ' (empty input keeps this value)',
+  },
+  onboardingOtherProfiles: {
+    'zh-CN': '本机其它已有 profile 可用其它命令启动：{list}',
+    'en': 'Other profiles on this machine start with their own commands: {list}',
   },
   desktopNoInstaller: {
     'zh-CN': '当前平台没有 DSH Desktop 安装包（仅提供 macOS Universal 与 Windows x64）。已按 web 组合准备好 profile，本机可用 `dsh web`；需要 `--desktop-platform mac|win` 为其它机器代下安装包。',

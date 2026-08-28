@@ -52,6 +52,15 @@ dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
 
 Nothing else is touched: no profile files are rewritten, no `cordis.yml` is generated, and the wizard itself never calls a model API.
 
+### Existing-user protection (0.5.4+)
+
+Rerunning the wizard on a machine that already has configuration:
+
+- **Merge semantics** (the default, no overwrites): credentials merge per entry — other providers' entries survive untouched; profile plugins only ever get added; the model catalog upserts per row. The wizard states both facts before touching anything.
+- **Automatic backup**: before the first change, `.credentials.yaml` and the profile's `package.json`/`.npmrc`/`cordis.patch.yml` are snapshotted into `~/.dsh/.zcf/backups/<timestamp>-<profile>/` (a RESTORE.md inside spells the copy-back steps; the newest 5 snapshots are kept). Interactive runs get one continue confirm here; fresh machines skip the block entirely.
+- **Other launch commands**: every profile starts independently with `dsh --profile <name>`; the onboarding lists the launch commands for the machine's other profiles. When a foreign `dsh-tui` command is detected (the TUI project ships the same name), the wizard no longer claims it ready and never fights over the name (no EEXIST); its own self-healing launcher is always available as the `dzcf-tui` alias.
+- **Legacy desktop migration**: the `dsh-desktop-app` doc bundle left by app surfaces from 0.5.2 and earlier is removed automatically on the next run.
+
 ## Options
 
 | Option | Meaning |

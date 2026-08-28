@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -66,9 +66,17 @@ function scriptedPrompt(answers: Readonly<Record<string, unknown>>): {
   asked: PromptQuestion[]
 } {
   const asked: PromptQuestion[] = []
+  const timesAsked = new Map<string, number>()
   const prompt = async (questions: readonly PromptQuestion[]): Promise<PromptOutcome> => {
     for (const question of questions) {
       asked.push(question)
+      const times = (timesAsked.get(question.name) ?? 0) + 1
+      timesAsked.set(question.name, times)
+      // A scripted prompt never varies its answers, so a wizard that keeps
+      // re-asking one question is looping (mock keys drifting off the real
+      // question names used to do exactly this until the worker OOM'd); fail
+      // with a readable cause instead.
+      if (times > 50) throw new Error(`scriptedPrompt: '${question.name}' asked ${times} times — the wizard looks stuck in a loop`)
       if (!(question.name in answers)) return { status: 'cancelled' }
     }
     return { status: 'answered', value: answers }
@@ -585,6 +593,7 @@ describe('runWizard — registry pick and install streaming', () => {
     const latencies = new Map([
       ['https://registry.npmjs.org', 1200],
       ['https://registry.npmmirror.com', 90],
+      ['https://repo.huaweicloud.com/repository/npm', 200],
     ])
     const lines: string[] = []
     const code = await runWizard({
@@ -604,9 +613,12 @@ describe('runWizard — registry pick and install streaming', () => {
     const registryQuestion = asked.find(question => question.name === 'registry')
     expect(registryQuestion?.type).toBe('list')
     if (registryQuestion?.type !== 'list') return
+    expect(registryQuestion.choices).toHaveLength(3)
     expect(registryQuestion.choices[0]?.value).toBe('https://registry.npmmirror.com')
     expect(registryQuestion.choices[0]?.name).toContain('90ms')
-    expect(registryQuestion.choices[1]?.name).toContain('1200ms')
+    expect(registryQuestion.choices[1]?.name).toContain('200ms')
+    expect(registryQuestion.choices[1]?.name).toContain('华为云')
+    expect(registryQuestion.choices[2]?.name).toContain('1200ms')
     expect(calls[0]?.args).toContain('--registry=https://registry.npmmirror.com')
   })
 
@@ -637,7 +649,7 @@ describe('runWizard — registry pick and install streaming', () => {
     expect(code).toBe(0)
     expect(asked.some(question => question.name === 'registry')).toBe(false)
     expect(calls[0]?.args.some(arg => arg.startsWith('--registry='))).toBe(false)
-    expect(lines.join('\n')).toContain('两个安装源都未在 3 秒内应答')
+    expect(lines.join('\n')).toContain('所有安装源都未在 3 秒内应答')
   })
 
   it('fails loud when the streaming installer fails', async () => {
@@ -929,7 +941,7 @@ describe('runWizard — marketplace and manage', () => {
     const home = await tempHome()
     await ensureHomeDirectory(home)
     await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-primary-1234567890', DEEPSEEK_API_KEY_BAK: 'sk-backup-1234567890' })
-    const { prompt, asked } = scriptedPrompt({ keyChoice: 'DEEPSEEK_API_KEY_BAK', baseUrl: '', mode: 'web', plugins: [], proceed: true, modelManual: '' })
+    const { prompt, asked } = scriptedPrompt({ keyChoice: 'DEEPSEEK_API_KEY_BAK', baseUrl: '', mode: 'web', plugins: [], proceed: true, modelManual: '', keepGoing: true })
     const { run } = scriptedRun()
     const lines: string[] = []
     const code = await runWizard(await context({ home, run, prompt, interactive: true, ...outputLines(lines) }), { ...OPTIONS })
@@ -1122,10 +1134,14 @@ describe('runWizard — marketplace and manage', () => {
     let installed = false
     const base = scriptedRun({
       bash: (args) => {
-        if (args.at(-1) === 'command -v dsh-tui || true') {
+        const cmd = args.join(' ')
+        if (cmd.includes('command -v dsh-tui')) {
           return installed
             ? { status: 0, stdout: '/usr/local/bin/dsh-tui\n', stderr: '' }
             : { status: 0, stdout: '', stderr: '' }
+        }
+        if (cmd.includes('readlink')) {
+          return { status: 0, stdout: '/usr/local/lib/node_modules/dsh-zcf/lib/cli.cjs\n', stderr: '' }
         }
         return { status: 0, stdout: '', stderr: '' }
       },
@@ -1137,7 +1153,7 @@ describe('runWizard — marketplace and manage', () => {
         return { status: 0, stdout: '11.0.0\n', stderr: '' }
       },
     })
-    const { prompt } = scriptedPrompt({ key: 'sk-typed-1234567890', baseUrl: '', modelManual: '', mode: 'web', plugins: [], proceed: true, globalShortcut: true })
+    const { prompt } = scriptedPrompt({ key: 'sk-typed-1234567890', baseUrl: '', modelManual: '', mode: 'web', plugins: [], proceed: true, globalShortcut: true, keepGoing: true })
     const lines: string[] = []
     const code = await runWizard(await context({ home, run: base.run, prompt, interactive: true, ...outputLines(lines) }), {
       ...OPTIONS, key: 'sk-test-1234', mode: 'web', yes: false, selfVersion: '0.4.3',
@@ -1327,6 +1343,147 @@ describe('runWizard — app surface (DSH Desktop installer)', () => {
     expect(code).toBe(0)
     expect(lines.join('\n')).toContain('已跳过下载')
     await expect(stat(join(downloadDir, scripted.savedName))).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+})
+
+
+describe('runWizard — existing-user protection', () => {
+  const seededHome = async (): Promise<string> => {
+    const home = await tempHome()
+    await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-stored-0001', DEEPSEEK_BASE_URL: 'https://relay.example.com', OTHER_API_KEY: 'sk-other-0002' })
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dsh-spend'] } } }))
+    return home
+  }
+
+  it('announces merge semantics, takes a backup, and preserves everything', async () => {
+    const home = await seededHome()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'init', key: 'sk-stored-0001', mode: 'web', yes: true,
+    })
+    expect(code).toBe(0)
+    const text = lines.join('\n')
+    expect(text).toContain('合并语义')
+    expect(text).toContain('已备份原配置')
+    const backups = await readdir(join(home, '.zcf', 'backups'))
+    expect(backups.length).toBe(1)
+    const saved = await readFile(join(home, '.zcf', 'backups', backups[0] as string, 'profiles', 'dzcf', 'package.json'), 'utf8')
+    expect(saved).toContain('dsh-spend')
+    expect(readCredentials(home)['OTHER_API_KEY']).toBe('sk-other-0002')
+    expect(JSON.parse(await readFile(join(home, 'profiles', 'dzcf', 'package.json'), 'utf8')).dsh.profile.bundles).toContain('dsh-spend')
+  })
+
+  it('stops without changes when the interactive protection confirm is declined', async () => {
+    const home = await seededHome()
+    const { prompt } = scriptedPrompt({ baseUrl: '', key: 'sk-stored-0001', modelManual: '', mode: 'web', plugins: [], proceed: true, keepGoing: false })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, prompt, interactive: true, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'init', key: 'sk-stored-0001', mode: 'web',
+    })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('已取消，未做任何修改')
+    expect(readCredentials(home)['OTHER_API_KEY']).toBe('sk-other-0002')
+    // The declined run still leaves the backup behind.
+    expect((await readdir(join(home, '.zcf', 'backups'))).length).toBe(1)
+  })
+
+  it('says nothing on a fresh machine', async () => {
+    const home = await tempHome()
+    const lines: string[] = []
+    await runWizard(await context({ home, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'init', key: 'sk-fresh-0003', mode: 'web', yes: true,
+    })
+    const text = lines.join('\n')
+    expect(text).not.toContain('合并语义')
+    expect(text).not.toContain('已备份原配置')
+  })
+
+  it('lists other profiles with their launch commands in the onboarding', async () => {
+    const home = await seededHome()
+    await mkdir(join(home, 'profiles', 'dzcf-tui'), { recursive: true })
+    const lines: string[] = []
+    await runWizard(await context({ home, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'init', key: 'sk-stored-0001', mode: 'web', yes: true,
+    })
+    expect(lines.join('\n')).toContain('dsh --profile dzcf-tui')
+  })
+
+  it('removes the legacy dsh-desktop-app bundle when the app surface reruns', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-desktop-app'] } } }))
+    const { run, calls } = scriptedRun()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'init', key: 'sk-legacy-0004', mode: 'app', yes: true,
+    })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('dsh-desktop-app')
+    expect(calls).toContainEqual({ command: 'dsh', args: ['plugin', '--profile', 'dzcf', 'remove', '-w', 'dsh-desktop-app'] })
+  })
+})
+
+describe('runWizard — dsh-tui launcher ownership', () => {
+  const bashOverride = (resolved: string): ((args: readonly string[]) => RunResult) => (args) => {
+    const cmd = args.join(' ')
+    if (cmd.includes('command -v dsh-tui')) return { status: 0, stdout: '/home/adam/.npm-global/bin/dsh-tui\n', stderr: '' }
+    if (cmd.includes('readlink')) return { status: 0, stdout: `${resolved}\n`, stderr: '' }
+    return { status: 0, stdout: '', stderr: '' }
+  }
+
+  it('does not claim a foreign dsh-tui as ready and skips the doomed install', async () => {
+    const home = await tempHome()
+    const { run, calls } = scriptedRun({ bash: bashOverride('/home/adam/.npm-global/lib/node_modules/@deepseek-harness-tui/dsh-tui/bin/dsh-tui.js') })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'init', key: 'sk-foreign-0005', mode: 'tui', yes: true,
+    })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('其它来源的 dsh-tui')
+    expect(calls.filter(call => call.command === 'npm')).toHaveLength(0)
+  })
+
+  it('claims readiness only for the wizard-owned launcher', async () => {
+    const home = await tempHome()
+    const { run } = scriptedRun({ bash: bashOverride('/home/adam/.npm-global/lib/node_modules/dsh-zcf/lib/cli.cjs') })
+    const { prompt, asked } = scriptedPrompt({ baseUrl: '', key: 'sk-own-0006', modelManual: '', mode: 'tui', plugins: [], proceed: true })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, prompt, interactive: true, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'init',
+    })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('已全局就绪')
+    expect(asked.filter(question => question.name === 'globalShortcut')).toHaveLength(0)
+  })
+})
+
+describe('runWizard — credentials flow keep semantics', () => {
+  it('a skipped model keeps the pending key and endpoint changes', async () => {
+    const home = await tempHome()
+    await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-old-0001' })
+    const models = async (): Promise<readonly string[] | undefined> => ['deepseek-chat', 'deepseek-reasoner']
+    const { prompt } = scriptedPrompt({ kmenu: 'all', baseUrl: 'https://relay.example.com', keyChoice: '__NEW__', key: 'sk-new-0002', model: '__SKIP__', proceed: true })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, prompt, interactive: true, fetchModels: models, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'credentials',
+    })
+    expect(code).toBe(0)
+    expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-new-0002', DEEPSEEK_BASE_URL: 'https://relay.example.com' })
+  })
+
+  it('shows the stored endpoint with a kept hint when the input is empty', async () => {
+    const home = await tempHome()
+    await writeCredentials(home, { DEEPSEEK_API_KEY: 'sk-old-0001', DEEPSEEK_BASE_URL: 'https://relay.example.com' })
+    const { prompt } = scriptedPrompt({ kmenu: 'baseUrl', baseUrl: '', proceed: true })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, prompt, interactive: true, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'credentials',
+    })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('https://relay.example.com')
+    expect(lines.join('\n')).toContain('留空=保留此值')
+    expect(readCredentials(home)['DEEPSEEK_BASE_URL']).toBe('https://relay.example.com')
   })
 })
 

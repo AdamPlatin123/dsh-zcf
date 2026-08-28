@@ -93,10 +93,17 @@ export function detectPackageManager(run: RunFn): string | undefined {
   return undefined
 }
 
-/** Registries the wizard offers for the dsh install, in menu order. */
-export const REGISTRY_OPTIONS: readonly { id: 'official' | 'mirror'; url: string }[] = [
-  { id: 'official', url: 'https://registry.npmjs.org' },
-  { id: 'mirror', url: 'https://registry.npmmirror.com' },
+/**
+ * Registries the wizard offers for the dsh install, in menu order. Each entry
+ * carries the i18n key of its menu label; adding a mirror is one entry here
+ * plus one message, nothing else. The full-sync mirrors (Huawei) track the
+ * official version list completely, while popularity-ranked mirrors (Aliyun)
+ * can lag days behind on cold platform-specific packages.
+ */
+export const REGISTRY_OPTIONS: readonly { labelKey: string; url: string }[] = [
+  { labelKey: 'registryOfficial', url: 'https://registry.npmjs.org' },
+  { labelKey: 'registryAliyun', url: 'https://registry.npmmirror.com' },
+  { labelKey: 'registryHuawei', url: 'https://repo.huaweicloud.com/repository/npm' },
 ]
 
 /** How long one registry probe may take before counting as unreachable. */

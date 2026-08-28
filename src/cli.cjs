@@ -13,9 +13,12 @@ if (!satisfied) {
   console.error('升级 / upgrade: nvm install 22 && nvm use 22, or https://github.com/nodesource/distributions')
   process.exit(1)
 }
-// A second bin name over this same launcher: `dsh-tui` starts the default
-// profile's terminal UI without any subcommand typing.
-if (process.argv[1] !== undefined && process.argv[1].endsWith('dsh-tui') && !process.argv.slice(2).includes('tui')) {
+// Two more bin names over this same launcher: `dsh-tui` (the primary) and
+// `dzcf-tui` (an alias that stays available when a foreign package owns the
+// dsh-tui name) start the default profile's terminal UI without any
+// subcommand typing.
+const launcher = process.argv[1] ?? ''
+if ((launcher.endsWith('dsh-tui') || launcher.endsWith('dzcf-tui')) && !process.argv.slice(2).includes('tui')) {
   process.argv.splice(2, 0, 'tui')
 }
 import('./bin.js')
