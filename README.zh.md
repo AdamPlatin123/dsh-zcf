@@ -44,7 +44,7 @@ dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
 
 ## 它做什么
 
-1. **检测 `dsh`**（`dsh -V`）。不存在？向导先预告体量（`@deepseek-ai/dsh` 是完整发行版：60+ 个子包、数百个依赖，官方源约 5–15 分钟、镜像源约 1–2 分钟），交互模式实测官方源与阿里云镜像的往返延迟并把快的一方排在首位供选择；`--registry <url>` 显式指定安装源（跳过探测），非交互模式默认包管理器自己的源、绝不静默切换。安装过程逐行实时转发输出并报告耗时；`--yes` 跳过询问，没有可用包管理器则报错退出。
+1. **检测 `dsh`**（`dsh -V`）。不存在？向导先预告体量（`@deepseek-ai/dsh` 是完整发行版：60+ 个子包、数百个依赖，官方源约 5–15 分钟、镜像源约 1–2 分钟），交互模式实测官方源、阿里云镜像与华为云镜像（全量同步）的往返延迟并把快的一方排在首位供选择；`--registry <url>` 显式指定安装源（跳过探测），非交互模式默认包管理器自己的源、绝不静默切换。安装过程逐行实时转发输出并报告耗时；`--yes` 跳过询问，没有可用包管理器则报错退出。
 2. **收集输入**——DeepSeek API Key（掩码输入）、可选的 `DEEPSEEK_BASE_URL` 覆盖，以及运行形态：`tui` 终端 UI（Claude Code 风格）、`web` 浏览器 UI、或 `app` DSH Desktop 桌面客户端（anywhere-labs 的 Electron 应用：向导按平台自动下载安装包到 `~/Downloads` 并引导安装；仅 macOS Universal 与 Windows x64 有安装包，其它平台自动落回 web 组合）。交互模式逐项询问；非交互模式必须有 `--key` 和 `--mode`，缺失即报错退出。
 3. **写入凭据**到 `$DSH_HOME/.credentials.yaml`——`dsh-credentials-local` 读取的受管文档，仅属主可读写（0700 目录下的 0600 文件）。未涉及的既有条目原样保留；写入在跨进程写锁内先重读再原子提交。Key 绝不回显：摘要里始终是掩码（`sk-***4321`）。
 4. **验证 profile**：执行 `dsh --profile <mode> --dump-default-config`——内置的 `web`/`headless` profile 首次启动会自动初始化，所以一次成功的 dump 就能证明零配置闭环，无需任何模型调用。失败时输出 dsh 的 stderr；已写入的凭据保留。
