@@ -179,6 +179,50 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '检测到被拒构建脚本：{deps}。已加入 {plugin} 所在 profile 的白名单并重试……',
     'en': 'Refused build scripts detected: {deps}. Added to the profile allowlist for {plugin} and retrying…',
   },
+  pluginRegistryFallback: {
+    'zh-CN': '镜像安装源缺少所需版本（同步滞后）。已将该 profile 的安装源切换为官方源 {to} 并重试——后续安装也会走官方源。',
+    'en': 'The pinned mirror registry lacks a required version (sync lag). This profile\'s registry is now switched to the official {to} and retried — later installs inherit it.',
+  },
+  webAlreadyRunning: {
+    'zh-CN': '✓ Web 服务已在运行：{url}（浏览器打开即可；重启它会先停掉后台进程）',
+    'en': '✓ The web service is already running: {url} (open it in a browser; restarting it means stopping the background process first)',
+  },
+  webLaunchAsk: {
+    'zh-CN': '现在启动 Web 界面吗？（后台运行，本向导退出后仍存活）',
+    'en': 'Start the web UI now? (runs in the background and outlives this wizard)',
+  },
+  webStarting: {
+    'zh-CN': '正在后台启动 Web 服务……',
+    'en': 'Starting the web service in the background…',
+  },
+  webReady: {
+    'zh-CN': '✓ Web 界面已就绪：{url}（后台运行；停止请退出对应后台进程）',
+    'en': '✓ The web UI is ready: {url} (running in the background; stop it via its background process)',
+  },
+  webStartFailedFallback: {
+    'zh-CN': '× Web 服务未在等待窗口内就绪。请手动运行 `{command}`，就绪后浏览器打开 {url}。',
+    'en': '× The web service did not become ready in time. Run `{command}` manually, then open {url} in a browser.',
+  },
+  desktopAlreadyInstalled: {
+    'zh-CN': '✓ 检测到已安装的 DSH Desktop——跳过安装包下载，凭据与 profile 已就绪。',
+    'en': '✓ DSH Desktop is already installed — installer download skipped; credentials and profile are ready.',
+  },
+  desktopInstallAsk: {
+    'zh-CN': '立即打开安装程序吗？（{path}）',
+    'en': 'Open the installer now? ({path})',
+  },
+  desktopInstallerLaunched: {
+    'zh-CN': '✓ 已启动安装程序——按提示完成安装即可，DSH Desktop 首次打开会自动读取本向导写入的凭据与 profile。',
+    'en': '✓ The installer has launched — follow its prompts; on first open DSH Desktop reads the credentials and profile this wizard wrote.',
+  },
+  desktopLaunchFailed: {
+    'zh-CN': '× 安装程序未能启动，请手动打开：{path}',
+    'en': '× The installer could not be launched; open it manually: {path}',
+  },
+  onboardingDesktopInstalled: {
+    'zh-CN': '打开 DSH Desktop 即可使用（凭据与 profile 已就绪；托盘常驻，『退出』才会结束应用和后台服务）',
+    'en': 'Open DSH Desktop and start talking (credentials and profile are ready; it is tray-resident, Quit ends the app and its services)',
+  },
   profileRecoveryAsk: {
     'zh-CN': 'profile 组装失败（可能残留损坏的安装状态）。删除并重建 {profile} 吗？（凭据不受影响；手动改过的 patch 配置会重置）',
     'en': 'Profile composition failed (likely broken leftover install state). Remove and rebuild {profile}? (credentials unaffected; manual patch edits reset)',

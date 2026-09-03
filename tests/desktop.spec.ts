@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 import {
   detectDesktopPlatform,
+  detectInstalledDesktop,
   downloadDesktopInstaller,
   resolveDesktopAsset,
   type FetchLike,
@@ -35,6 +36,25 @@ describe('detectDesktopPlatform', () => {
     expect(detectDesktopPlatform('mac', 'linux', 'x64')).toBe('mac')
     expect(detectDesktopPlatform('win', 'linux', 'x64')).toBe('win')
     expect(detectDesktopPlatform('nonsense', 'linux', 'x64')).toBe('none')
+  })
+})
+
+describe('detectInstalledDesktop', () => {
+  it('finds the Electron per-user install on Windows', () => {
+    const existsPaths: string[] = []
+    const exists = (path: string): boolean => { existsPaths.push(path); return path.endsWith(join('DSH Desktop', 'DSH Desktop.exe')) }
+    expect(detectInstalledDesktop('win32', exists, 'C:\\Users\\Adam\\AppData\\Local')).toBe(true)
+    expect(existsPaths[0]).toContain('Programs')
+  })
+
+  it('finds the /Applications bundle on macOS', () => {
+    expect(detectInstalledDesktop('darwin', path => path === '/Applications/DSH Desktop.app')).toBe(true)
+    expect(detectInstalledDesktop('darwin', () => false)).toBe(false)
+  })
+
+  it('is false without LOCALAPPDATA on Windows and on other platforms', () => {
+    expect(detectInstalledDesktop('win32', () => true, undefined)).toBe(false)
+    expect(detectInstalledDesktop('linux', () => true)).toBe(false)
   })
 })
 

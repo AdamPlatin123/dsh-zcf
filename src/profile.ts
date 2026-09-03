@@ -11,7 +11,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import yaml from 'js-yaml'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import type { Capability, PatchRow, Surface } from './capabilities.ts'
@@ -69,7 +69,7 @@ export function readDefaultProfile(home: string): string {
 /** Environment for launcher runs: the private pnpm bin leads the PATH. */
 function launcherEnv(): Readonly<Record<string, string | undefined>> | undefined {
   if (pnpmBinOverride === undefined) return undefined
-  return { PATH: `${pnpmBinOverride}:${process.env.PATH ?? ''}` }
+  return { PATH: `${pnpmBinOverride}${delimiter}${process.env.PATH ?? ''}` }
 }
 
 function pluginAdd(run: RunFn, profile: string, pkg: string): RunResult {
@@ -96,6 +96,24 @@ export async function writeProfileNpmrc(home: string, profile: string, registry:
   const lines = text.split('\n').filter(line => line !== '' && !line.startsWith('registry='))
   lines.push(`registry=${registry}`)
   await writeFileAtomic(path, `${lines.join('\n')}\n`, { mode: 0o600, dirMode: 0o700 })
+}
+
+/**
+ * The registry pinned in a profile's `.npmrc`, or undefined when the profile
+ * pins none (the package manager's own default applies). The read side of
+ * {@link writeProfileNpmrc}.
+ * @param home - resolved harness home.
+ * @param profile - profile name.
+ * @returns the pinned registry base URL, or undefined.
+ */
+export function readProfileRegistry(home: string, profile: string): string | undefined {
+  try {
+    const line = readFileSync(join(home, 'profiles', profile, '.npmrc'), 'utf8').split('\n').find(l => l.startsWith('registry='))
+    const value = line?.slice('registry='.length).trim()
+    return value === undefined || value === '' ? undefined : value
+  } catch {
+    return undefined
+  }
 }
 
 /**

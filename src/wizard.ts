@@ -8,6 +8,7 @@
  */
 
 import { tmpdir } from 'node:os'
+import { readFileSync } from 'node:fs'
 import { readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { dshHomeDisplay } from '@deepseek-ai/dsh-home-paths'
@@ -21,7 +22,7 @@ import type { RunFn, RunResult } from './exec.ts'
 import { detectPackageManager, dshAvailable, installDshArgs, REGISTRY_OPTIONS } from './exec.ts'
 import { ensureHomeDirectory, maskKey, migrateCredentialsIfNeeded, needsV1Migration, readCredentials, writeCredentials } from './credentials.ts'
 import { writeEnvFile } from './dotenv.ts'
-import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, readDefaultProfile, removePlugin, setPnpmBinOverride, writeDefaultProfile, writeProfileNpmrc } from './profile.ts'
+import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, readDefaultProfile, readProfileRegistry, removePlugin, setPnpmBinOverride, writeDefaultProfile, writeProfileNpmrc } from './profile.ts'
 import { detectDesktopPlatform, desktopDownloadDir, downloadDesktopInstaller, resolveDesktopAsset, type FetchLike } from './desktop.ts'
 import { backupExistingState } from './backup.ts'
 
@@ -43,6 +44,14 @@ export interface WizardContext {
   fetchDesktop: FetchLike
   /** Interactive launcher run with the terminal attached; returns the exit code. */
   runInteract: (command: string, args: readonly string[]) => number
+  /** PATH lookup (`which`) for command existence probes; injectable for tests. */
+  which: (name: string) => string | undefined
+  /** Background (detached) launcher for long-running services; true when spawned. */
+  runDetached: (command: string, args: readonly string[]) => boolean
+  /** Web UI readiness probe; true when the port answers. */
+  probeWeb: (url: string) => Promise<boolean>
+  /** Whether DSH Desktop is already installed (skips the installer download). */
+  desktopInstalled: () => boolean
   /** Interactive prompt implementation. */
   prompt: PromptFn
   /** True when stdin and stdout are both a TTY. */
@@ -64,14 +73,16 @@ interface IntegrationPlan {
 type T = (key: string, params?: Readonly<Record<string, string>>) => string
 
 /** The post-init onboarding block: launch, first run, daily management, docs. */
-function onboardingBlock(surface: Surface, profile: string, model: string | undefined, t: T, shortcutReady: boolean, installerPath?: string): string {
+function onboardingBlock(surface: Surface, profile: string, model: string | undefined, t: T, shortcutReady: boolean, installerPath?: string, desktopInstalled = false): string {
   const launch = surface === 'web'
     ? t('onboardingLaunchWeb')
     : surface === 'tui'
       ? (shortcutReady ? t('onboardingLaunchTuiShortcut') : t('onboardingLaunchTui', { profile }))
-      : installerPath === undefined
-        ? t('onboardingLaunchDesktopNone', { profile })
-        : t('onboardingLaunchDesktop', { path: installerPath })
+      : desktopInstalled
+        ? t('onboardingDesktopInstalled')
+        : installerPath === undefined
+          ? t('onboardingLaunchDesktopNone', { profile })
+          : t('onboardingLaunchDesktop', { path: installerPath })
   return [
     t('onboardingTitle'),
     t('onboardingProfileBridge', { profile }),
@@ -83,28 +94,48 @@ function onboardingBlock(surface: Surface, profile: string, model: string | unde
 }
 
 /**
- * Whether `dsh-tui` resolves to a real global launcher (an npx cache bin
- * does not count — it disappears with the cache).
- * @param run - command runner.
+ * Resolve the `dsh-tui` command to its owner path when it belongs to this
+ * wizard's global install. The lookup is a plain filesystem PATH scan (no
+ * bash needed); ownership follows the platform: POSIX resolves the symlink
+ * with `readlink -f`, Windows reads the npm cmd-shim, whose text embeds the
+ * target (`node "%~dp0\..\node_modules\dsh-zcf\lib\cli.cjs"`). A foreign
+ * `dsh-tui` (the TUI project ships its own command) resolves to undefined —
+ * it would silently bypass the preflight launcher this wizard promises.
+ * @param run - command runner (POSIX readlink only).
+ * @param which - PATH lookup implementation.
+ * @param platform - platform to resolve for (injectable for tests).
+ * @returns the owner-resolved path, or undefined when absent/foreign/npx.
  */
-function globalShortcutReady(run: RunFn): boolean {
-  const probe = run('bash', ['-lc', 'command -v dsh-tui || true'])
-  if (probe.status !== 0) return false
-  const found = probe.stdout.trim()
-  if (found === '' || found.includes('_npx')) return false
-  // The bin must belong to the global dsh-zcf install. A foreign `dsh-tui`
-  // (the TUI project ships its own command) would silently bypass the
-  // preflight launcher this wizard promises, so it must not count as ready.
+function launcherOwnerPath(run: RunFn, which: (name: string) => string | undefined, platform: NodeJS.Platform = process.platform): string | undefined {
+  const found = which('dsh-tui')
+  if (found === undefined || found === '' || found.includes('_npx')) return undefined
+  if (platform === 'win32') {
+    try {
+      return readFileSync(found, 'utf8').includes('dsh-zcf') ? found : undefined
+    } catch {
+      return undefined
+    }
+  }
   const real = run('bash', ['-lc', `readlink -f "${found}" || true`])
   const resolved = real.status === 0 ? real.stdout.trim() : ''
-  return resolved !== '' && resolved.includes('dsh-zcf')
+  return resolved !== '' && resolved.includes('dsh-zcf') ? resolved : undefined
+}
+
+/**
+ * Whether `dsh-tui` resolves to a real global launcher this wizard owns (an
+ * npx cache bin does not count — it disappears with the cache).
+ * @param run - command runner (POSIX readlink only).
+ * @param which - PATH lookup implementation.
+ * @param platform - platform to resolve for (injectable for tests).
+ */
+export function globalShortcutReady(run: RunFn, which: (name: string) => string | undefined, platform: NodeJS.Platform = process.platform): boolean {
+  return launcherOwnerPath(run, which, platform) !== undefined
 }
 
 /** Whether a `dsh-tui` command exists that this wizard did not install. */
-function foreignDshTuiPresent(run: RunFn): boolean {
-  const probe = run('bash', ['-lc', 'command -v dsh-tui || true'])
-  const found = probe.status === 0 ? probe.stdout.trim() : ''
-  return found !== '' && !found.includes('_npx') && !globalShortcutReady(run)
+function foreignDshTuiPresent(run: RunFn, which: (name: string) => string | undefined, platform: NodeJS.Platform = process.platform): boolean {
+  const found = which('dsh-tui')
+  return found !== undefined && found !== '' && !found.includes('_npx') && !globalShortcutReady(run, which, platform)
 }
 
 /**
@@ -118,9 +149,9 @@ function foreignDshTuiPresent(run: RunFn): boolean {
  * @returns true when `dsh-tui` is (now) globally available.
  */
 async function ensureGlobalShortcut(context: WizardContext, t: T, options: DzcfOptions, surface: Surface): Promise<boolean> {
-  const { run, out } = context
-  if (globalShortcutReady(run)) return true
-  if (foreignDshTuiPresent(run)) {
+  const { run, out, which } = context
+  if (globalShortcutReady(run, which)) return true
+  if (foreignDshTuiPresent(run, which)) {
     // npm would refuse the install outright (bin EEXIST); the wizard's own
     // launcher stays reachable through dzcf-tui and the profile command.
     // The notice is tui-only: web and app runs never need the shortcut.
@@ -138,7 +169,7 @@ async function ensureGlobalShortcut(context: WizardContext, t: T, options: DzcfO
   }
   out(t('globalShortcutInstalling'))
   const install = run('npm', args)
-  if (install.status !== 0 || !globalShortcutReady(run)) {
+  if (install.status !== 0 || !globalShortcutReady(run, which)) {
     out(t('globalShortcutHint', { command: `npm install -g dsh-zcf@${options.selfVersion}` }))
     return false
   }
@@ -267,9 +298,12 @@ function ensurePnpm(context: WizardContext, t: T, options: DzcfOptions): boolean
   }
   const privateRoot = join(context.home, '.zcf', `pnpm${PNPM_MAJOR}`)
   const privateBin = join(privateRoot, 'node_modules', '.bin')
+  // The extension-less `.bin/pnpm` is a sh script on Windows — only the
+  // `.cmd` shim is executable there; POSIX keeps the plain name.
+  const privatePnpm = join(privateBin, process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm')
   const registryArgs = options.registry === undefined ? [] : [`--registry=${options.registry}`]
   const args = ['install', '--prefix', privateRoot, `pnpm@${PNPM_MAJOR}`, '--no-audit', '--no-fund', ...registryArgs]
-  const installed = run(join(privateBin, 'pnpm'), ['-v'], undefined, undefined, tmpdir())
+  const installed = run(privatePnpm, ['-v'], undefined, undefined, tmpdir())
   if (installed.status !== 0 && currentMajor === undefined) {
     out(t('pnpmPrivateNotice'))
   } else if (installed.status !== 0) {
@@ -285,7 +319,7 @@ function ensurePnpm(context: WizardContext, t: T, options: DzcfOptions): boolean
     out(t('pnpmInstalling', { command: `${npm} ${args.join(' ')}` }))
     const install = run(npm, args)
     // Judge by the result: the private binary answering at the right major.
-    const verify = run(join(privateBin, 'pnpm'), ['-v'], undefined, undefined, tmpdir())
+    const verify = run(privatePnpm, ['-v'], undefined, undefined, tmpdir())
     if (verify.status !== 0 || parseMajor(verify.stdout) !== PNPM_MAJOR) {
       err(t('pnpmInstallFailed', { stderr: install.stderr.trim() }))
       return false
@@ -887,6 +921,39 @@ function hintFor(plugin: RecommendedPlugin, tui: boolean, lang: 'zh-CN' | 'en', 
   return tui && plugin.surface === 'web' ? `${base} ${t('webOnlySuffix')}` : base
 }
 
+/** The official registry, first entry of the offered list. */
+const OFFICIAL_REGISTRY = REGISTRY_OPTIONS[0]?.url ?? 'https://registry.npmjs.org'
+
+/**
+ * Whether a failure detail is pnpm refusing to resolve a version the pinned
+ * registry does not carry — the popularity-ranked mirrors lag days behind on
+ * cold platform-specific packages, and resolution then fails outright.
+ */
+function isNoMatchingVersion(detail: string): boolean {
+  return detail.includes('ERR_PNPM_NO_MATCHING_VERSION')
+}
+
+/**
+ * Switch a profile's pinned registry to the official one when a mirror's
+ * missing version broke resolution. The switch persists in `.npmrc` (later
+ * installs inherit it) and is announced — the wizard never swaps sources
+ * silently.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param profile - the profile being installed into.
+ * @param detail - the captured failure text.
+ * @returns true when the registry was switched and a retry is warranted.
+ */
+async function fallbackToOfficialRegistry(context: WizardContext, t: T, profile: string, detail: string): Promise<boolean> {
+  if (!isNoMatchingVersion(detail)) return false
+  const { home } = context
+  const current = readProfileRegistry(home, profile)
+  if (current === OFFICIAL_REGISTRY) return false
+  await writeProfileNpmrc(home, profile, OFFICIAL_REGISTRY)
+  context.out(t('pluginRegistryFallback', { from: current ?? '', to: OFFICIAL_REGISTRY }))
+  return true
+}
+
 /** Install recommended plugins into a profile; false on first failure. */
 async function installPlugins(context: WizardContext, t: T, profile: string, plugins: readonly RecommendedPlugin[]): Promise<boolean> {
   const { home } = context
@@ -895,7 +962,7 @@ async function installPlugins(context: WizardContext, t: T, profile: string, plu
     // (measured ~2.4x over per-plugin runs on three plugins); pnpm's own
     // Progress lines stream through as the progress display. A batch failure
     // falls back to the per-plugin loop below, which also self-heals refused
-    // build scripts.
+    // build scripts and a mirror's missing versions.
     context.out(t('pluginsBatchInstalling', { count: String(plugins.length) }))
     const started = Date.now()
     const batch = await context.installDsh('dsh', ['plugin', '--profile', profile, 'add', '-w', ...plugins.map(plugin => plugin.id)], (line) => {
@@ -934,6 +1001,12 @@ async function installPlugins(context: WizardContext, t: T, profile: string, plu
         } catch {
           // fall through to the loud failure below
         }
+      }
+      // A mirror missing a platform package fails resolution outright; the
+      // announced switch to the official registry (persisted in .npmrc, so
+      // later installs inherit it) makes the retry resolve.
+      if (result.status !== 0 && await fallbackToOfficialRegistry(context, t, profile, detail)) {
+        result = installPlugin(context.run, profile, plugin.id)
       }
       if (result.status !== 0) {
         // The launcher folds pnpm's own failure into one line, while the real
@@ -1213,18 +1286,99 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
 
   // The app surface hands the desktop shell to the standalone DSH Desktop
   // installer; credentials and the web-composed profile above are what the
-  // app reads from the shared DSH home once installed.
+  // app reads from the shared DSH home once installed. An already-installed
+  // desktop skips the whole download.
   let installerPath: string | undefined
+  let desktopInstalled = false
   if (surface === 'app') {
-    installerPath = await acquireDesktopInstaller(context, t, options)
+    desktopInstalled = context.desktopInstalled()
+    if (desktopInstalled) {
+      out(t('desktopAlreadyInstalled'))
+    } else {
+      installerPath = await acquireDesktopInstaller(context, t, options)
+      if (installerPath !== undefined) await offerDesktopInstall(context, t, options, installerPath)
+    }
   }
 
   out('')
   const shortcutReady = await ensureGlobalShortcut(context, t, options, surface)
-  out(onboardingBlock(surface, profile, collected.state.model, t, shortcutReady, installerPath))
+  out(onboardingBlock(surface, profile, collected.state.model, t, shortcutReady, installerPath, desktopInstalled))
   const others = await listOtherProfiles(context.home, profile)
   if (others.length > 0) out(t('onboardingOtherProfiles', { list: others.map(name => `dsh --profile ${name}`).join('；') }))
+  if (surface === 'web') await offerLaunchWeb(context, t, options, profile)
   return 0
+}
+
+/**
+ * Open a downloaded DSH Desktop installer for the user: asked (never
+ * automatic — a GUI installer needs a human at the prompts), then launched
+ * detached so the wizard does not wait for the install to finish. macOS
+ * mounts the dmg via `open`; Windows runs the Setup.exe directly.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param options - resolved command-line options.
+ * @param installerPath - the saved installer path.
+ */
+async function offerDesktopInstall(context: WizardContext, t: T, options: DzcfOptions, installerPath: string): Promise<void> {
+  const { out } = context
+  // Non-interactive (and --yes) runs keep the printed path: the installer's
+  // wizard needs someone at the screen, which a batch run does not have.
+  if (!context.interactive || options.yes) return
+  const outcome = await askOne(context.prompt, { type: 'confirm', name: 'openInstaller', message: t('desktopInstallAsk', { path: installerPath }), default: true })
+  if (outcome.status === 'cancelled' || outcome.value.openInstaller !== true) return
+  const launched = process.platform === 'darwin'
+    ? context.runDetached('open', [installerPath])
+    : context.runDetached(installerPath, [])
+  if (launched) out(t('desktopInstallerLaunched'))
+  else out(t('desktopLaunchFailed', { path: installerPath }))
+}
+
+/** The web surface's default UI address (the launcher's own default). */
+const WEB_URL = 'http://127.0.0.1:3080'
+
+/** How long the launched web service may take to answer its port. */
+const WEB_READY_WAIT_MS = 15_000
+
+/** One readiness poll while waiting for the web service to come up. */
+const WEB_READY_POLL_MS = 500
+
+/**
+ * Finish a web init by getting the UI in front of the user: a service
+ * already on the port is reused as-is; an interactive run is offered a
+ * background launch (detached — the service outlives the wizard) and waits
+ * for readiness; non-interactive runs keep the printed manual command.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param options - resolved command-line options.
+ * @param profile - the web profile to launch.
+ * @param waitMs - readiness window (injectable for tests).
+ */
+async function offerLaunchWeb(context: WizardContext, t: T, options: DzcfOptions, profile: string, waitMs = WEB_READY_WAIT_MS): Promise<void> {
+  const { out } = context
+  // Non-interactive (and --yes) runs keep the onboarding's manual command
+  // untouched: a background service in CI buys nothing, and their output must
+  // not depend on whatever happens to be listening on the port.
+  if (!context.interactive || options.yes) return
+  if (await context.probeWeb(WEB_URL)) {
+    out(t('webAlreadyRunning', { url: WEB_URL }))
+    return
+  }
+  const outcome = await askOne(context.prompt, { type: 'confirm', name: 'launchWeb', message: t('webLaunchAsk'), default: true })
+  if (outcome.status === 'cancelled' || outcome.value.launchWeb !== true) return
+  out(t('webStarting'))
+  if (!context.runDetached('dsh', ['--profile', profile, 'web'])) {
+    out(t('webStartFailedFallback', { command: `dsh --profile ${profile} web`, url: WEB_URL }))
+    return
+  }
+  const deadline = Date.now() + waitMs
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, WEB_READY_POLL_MS))
+    if (await context.probeWeb(WEB_URL)) {
+      out(t('webReady', { url: WEB_URL }))
+      return
+    }
+  }
+  out(t('webStartFailedFallback', { command: `dsh --profile ${profile} web`, url: WEB_URL }))
 }
 
 /** Profile names besides the active one, for the launch-alternatives line. */
@@ -1490,7 +1644,7 @@ async function runConfigure(context: WizardContext, t: T, options: DzcfOptions):
 
   if (!await setupIntegrations(context, t, home, surface, plan, options)) return 1
   out('')
-  out(onboardingBlock(surface, plan.profile, undefined, t, globalShortcutReady(context.run)))
+  out(onboardingBlock(surface, plan.profile, undefined, t, globalShortcutReady(context.run, context.which)))
   return 0
 }
 

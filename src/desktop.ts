@@ -11,7 +11,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { createWriteStream } from 'node:fs'
+import { createWriteStream, existsSync } from 'node:fs'
 import { mkdir, rename, rm } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -71,6 +71,27 @@ export function detectDesktopPlatform(explicit?: string, platform: NodeJS.Platfo
  */
 export function desktopDownloadDir(): string {
   return process.env.DZCF_DESKTOP_DIR ?? join(homedir(), 'Downloads')
+}
+
+/**
+ * Whether DSH Desktop is already installed on this machine. A plain
+ * existence check over the standard install locations: Electron's per-user
+ * directory on Windows (`%LOCALAPPDATA%\Programs\DSH Desktop\DSH Desktop.exe`,
+ * with the lowercase spelling as a second guess) and `/Applications` on
+ * macOS. An installed desktop skips the whole installer download.
+ * @param platform - platform to check (injectable for tests).
+ * @param exists - existence probe (injectable for tests).
+ * @param localAppData - the Windows per-user programs root (injectable).
+ * @returns true when an install location is present.
+ */
+export function detectInstalledDesktop(platform: NodeJS.Platform = process.platform, exists: (path: string) => boolean = existsSync, localAppData: string | undefined = process.env.LOCALAPPDATA): boolean {
+  if (platform === 'win32') {
+    if (localAppData === undefined) return false
+    return exists(join(localAppData, 'Programs', 'DSH Desktop', 'DSH Desktop.exe'))
+      || exists(join(localAppData, 'Programs', 'dsh-desktop', 'DSH Desktop.exe'))
+  }
+  if (platform === 'darwin') return exists('/Applications/DSH Desktop.app')
+  return false
 }
 
 function parseContentDispositionFileName(header: string | null): string | undefined {

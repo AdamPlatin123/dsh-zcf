@@ -7,6 +7,8 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process'
+import { accessSync, constants as fsConstants } from 'node:fs'
+import { isAbsolute, join } from 'node:path'
 
 /** Result of one synchronous command run. */
 export interface RunResult {
@@ -26,13 +28,34 @@ export type RunFn = (
 ) => RunResult
 
 /**
- * Run one command synchronously through the PATH, capturing output as UTF-8.
- * A missing executable yields `status: null` plus the spawn error on stderr.
+ * Characters cmd.exe re-interprets even inside double quotes (`%VAR%`,
+ * `!VAR!`, and friends). Node escapes `"` as `\"` when it serializes argv,
+ * which cmd does not understand either — so every one of these in a command
+ * or argument is rejected outright. Everything the wizard passes (package
+ * names, URLs, paths, profile names) stays inside the safe set, and a
+ * violation fails loud instead of executing a rewritten command line.
+ */
+const CMD_FORBIDDEN = /[&|<>^%!"]/
+
+/**
+ * Wrap one command line for cmd.exe on Windows, where npm/pnpm/dsh are
+ * `.cmd` shims that CreateProcess cannot launch directly (Node refuses
+ * shell-less `.cmd`/`.bat` spawns since the CVE-2024-27980 fix). `/d /s /c`
+ * plus per-argument quoting is the arrangement cmd documents for preserving
+ * quotes, so arguments with spaces survive.
  * @param command - executable name or path.
  * @param args - arguments.
- * @param env - optional environment override (merged over `process.env`).
- * @returns the run result.
+ * @returns the `cmd.exe` invocation to spawn instead.
+ * @throws when any part carries a cmd metacharacter (never silently mangled).
  */
+export function windowsSpawnArgs(command: string, args: readonly string[]): { file: string; argv: readonly string[] } {
+  const parts = [command, ...args]
+  for (const part of parts) {
+    if (CMD_FORBIDDEN.test(part)) throw new Error(`dsh-zcf: refusing to run through cmd.exe (metacharacter in ${JSON.stringify(part)})`)
+  }
+  return { file: 'cmd.exe', argv: ['/d', '/s', '/c', ...parts.map(part => `"${part}"`)] }
+}
+
 /**
  * Run a command with the terminal attached (stdin/stdout/stderr inherited),
  * for launchers the user is meant to interact with; Ctrl-C reaches the child
@@ -42,10 +65,29 @@ export type RunFn = (
  * @returns the exit code.
  */
 export function runInteractive(command: string, args: readonly string[]): number {
+  if (process.platform === 'win32') {
+    try {
+      const wrapped = windowsSpawnArgs(command, args)
+      const result = spawnSync(wrapped.file, [...wrapped.argv], { stdio: 'inherit', windowsHide: true })
+      return result.status ?? 1
+    } catch (error) {
+      return 1
+    }
+  }
   const result = spawnSync(command, [...args], { stdio: 'inherit' })
   return result.status ?? 1
 }
 
+/**
+ * Run one command synchronously through the PATH, capturing output as UTF-8.
+ * A missing executable yields `status: null` plus the spawn error on stderr.
+ * @param command - executable name or path.
+ * @param args - arguments.
+ * @param env - optional environment override (merged over `process.env`).
+ * @param timeoutMs - optional kill-after milliseconds.
+ * @param cwd - optional working directory.
+ * @returns the run result.
+ */
 export function runCommand(
   command: string,
   args: readonly string[],
@@ -53,18 +95,74 @@ export function runCommand(
   timeoutMs?: number,
   cwd?: string,
 ): RunResult {
-  const result = spawnSync(command, [...args], {
+  // A hung pnpm (store-lock wait on a broken profile) must surface as a
+  // failed run the wizard can recover from, not an indefinite stall.
+  const options = {
     encoding: 'utf8',
     env: env === undefined ? process.env : { ...process.env, ...env },
-    // A hung pnpm (store-lock wait on a broken profile) must surface as a
-    // failed run the wizard can recover from, not an indefinite stall.
     ...(timeoutMs === undefined ? {} : { timeout: timeoutMs }),
     ...(cwd === undefined ? {} : { cwd }),
-  })
+  }
+  let file = command
+  let argv = [...args]
+  if (process.platform === 'win32') {
+    try {
+      const wrapped = windowsSpawnArgs(command, args)
+      file = wrapped.file
+      argv = [...wrapped.argv]
+    } catch (error) {
+      return { status: null, stdout: '', stderr: (error as Error).message }
+    }
+  }
+  const result = spawnSync(file, argv, process.platform === 'win32' ? { ...options, windowsHide: true } : options)
   if (result.error !== undefined) {
     return { status: null, stdout: '', stderr: result.error.message }
   }
   return { status: result.status, stdout: result.stdout, stderr: result.stderr }
+}
+
+/**
+ * Find an executable on the PATH the way a shell would, without a shell:
+ * each directory is probed for the bare name (POSIX) or for the name with
+ * every PATHEXT extension in order (Windows). Replaces `bash -lc 'command
+ * -v …'`, which needs bash and does not exist on Windows.
+ * @param name - executable name to look for.
+ * @param pathEnv - PATH string (injectable for tests).
+ * @param pathExt - PATHEXT string with leading dot per extension (Windows only).
+ * @param platform - platform to resolve for (injectable for tests).
+ * @returns the first matching absolute path, or undefined.
+ */
+export function whichOnPath(name: string, pathEnv: string | undefined = process.env.PATH, pathExt: string | undefined = process.env.PATHEXT, platform: NodeJS.Platform = process.platform): string | undefined {
+  if (name === '') return undefined
+  // The separators follow the platform being resolved for, not the one
+  // running the test — the strings are POSIX or Windows shaped accordingly.
+  const entrySeparator = platform === 'win32' ? ';' : ':'
+  const hasExtension = /\.[^./\\]+$/.test(name)
+  const candidates: string[] = []
+  if (platform === 'win32') {
+    // Lowercase fallback extensions: Windows matching is case-insensitive,
+    // and lowercase keeps the lookup testable on case-sensitive hosts.
+    const extensions = (pathExt ?? '.com;.exe;.bat;.cmd').split(entrySeparator).filter(ext => ext !== '')
+    if (hasExtension) candidates.push(name)
+    else candidates.push(...extensions.map(ext => `${name}${ext.startsWith('.') ? ext : `.${ext}`}`))
+  } else {
+    candidates.push(name)
+  }
+  for (const dir of (pathEnv ?? '').split(entrySeparator)) {
+    if (dir === '') continue
+    for (const candidate of candidates) {
+      const full = isAbsolute(candidate) ? candidate : join(dir, candidate)
+      try {
+        // POSIX checks the executable bit; on Windows existence is all a
+        // permission check can mean (every PATHEXT hit is runnable via cmd).
+        accessSync(full, platform === 'win32' ? fsConstants.F_OK : fsConstants.X_OK)
+        return full
+      } catch {
+        // not present in this directory — keep scanning
+      }
+    }
+  }
+  return undefined
 }
 
 const DSH_PACKAGE = '@deepseek-ai/dsh'
@@ -151,7 +249,21 @@ export function installDshArgs(pm: string, registry?: string): readonly string[]
  */
 export function installDshStreaming(pm: string, args: readonly string[], onLine: (line: string) => void): Promise<RunResult> {
   return new Promise((resolve) => {
-    const child = spawn(pm, [...args], { stdio: ['ignore', 'pipe', 'pipe'] })
+    let file = pm
+    let argv = [...args]
+    let windows = false
+    if (process.platform === 'win32') {
+      windows = true
+      try {
+        const wrapped = windowsSpawnArgs(pm, args)
+        file = wrapped.file
+        argv = [...wrapped.argv]
+      } catch (error) {
+        resolve({ status: null, stdout: '', stderr: (error as Error).message })
+        return
+      }
+    }
+    const child = spawn(file, argv, { stdio: ['ignore', 'pipe', 'pipe'], ...(windows ? { windowsHide: true } : {}) })
     let stdout = ''
     let stderr = ''
     let pending = ''
@@ -185,9 +297,7 @@ export function installDshStreaming(pm: string, args: readonly string[], onLine:
 }
 
 /** How long the upstream model listing may take before counting as unreachable. */
-const MODELS_TIMEOUT_MS = 8000
-
-/**
+const MODELS_TIMEOUT_MS = 8000/**
  * List model ids from an OpenAI-compatible `GET {baseUrl}/models` endpoint
  * with the picked key; DeepSeek's public API is the default base.
  * @param baseUrl - endpoint base; empty uses the public DeepSeek API.
@@ -209,5 +319,59 @@ export async function fetchUpstreamModels(baseUrl: string, key: string): Promise
     return ids.length === 0 ? undefined : ids
   } catch {
     return undefined
+  }
+}
+
+/**
+ * Start a long-running service in the background and detach: the wizard does
+ * not wait for it (the web UI outlives the wizard that launched it). The
+ * child is unref'd so the wizard process can exit independently.
+ * @param command - executable name or path.
+ * @param args - arguments.
+ * @param env - optional environment override (merged over `process.env`).
+ * @returns true when the process was spawned; its later fate is observed
+ *          through a readiness probe, not through this return value.
+ */
+export function runDetached(command: string, args: readonly string[], env?: Readonly<Record<string, string | undefined>>): boolean {
+  let file = command
+  let argv = [...args]
+  let windows = false
+  if (process.platform === 'win32') {
+    windows = true
+    try {
+      const wrapped = windowsSpawnArgs(command, args)
+      file = wrapped.file
+      argv = [...wrapped.argv]
+    } catch {
+      return false
+    }
+  }
+  try {
+    const child = spawn(file, argv, {
+      stdio: 'ignore',
+      detached: true,
+      env: env === undefined ? process.env : { ...process.env, ...env },
+      ...(windows ? { windowsHide: true } : {}),
+    })
+    child.unref()
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Whether the web UI answers on its port. Any HTTP response counts as a live
+ * service (the wizard only needs to know the port is serving, not which page).
+ * @param url - base URL to probe.
+ * @param timeoutMs - per-request timeout.
+ * @returns true when the port responded.
+ */
+export async function probeWebReady(url: string, timeoutMs = 3000): Promise<boolean> {
+  try {
+    await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
+    return true
+  } catch {
+    return false
   }
 }

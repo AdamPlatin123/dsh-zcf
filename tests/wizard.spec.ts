@@ -9,7 +9,7 @@ import { writeDefaultProfile } from '../src/profile.ts'
 import yaml from 'js-yaml'
 import type { RunFn, RunResult } from '../src/exec.ts'
 import type { PromptOutcome, PromptQuestion } from '../src/ui.ts'
-import { runWizard, type WizardContext } from '../src/wizard.ts'
+import { globalShortcutReady, runWizard, type WizardContext } from '../src/wizard.ts'
 import { detectDesktopPlatform } from '../src/desktop.ts'
 
 const OPTIONS: DzcfOptions = { action: 'init', with: [], plugins: [], lang: 'zh-CN', yes: false, dryRun: false }
@@ -116,6 +116,10 @@ const context = async (overrides: Partial<WizardContext> & { home: string }): Pr
   fetchModels: NO_MODELS,
   fetchDesktop: NO_FETCH,
   runInteract: () => 127,
+  which: () => undefined,
+  runDetached: () => false,
+  probeWeb: async () => false,
+  desktopInstalled: () => false,
   prompt: scriptedPrompt({}).prompt,
   interactive: false,
   out: () => {},
@@ -137,6 +141,10 @@ describe('runWizard — non-interactive init', () => {
       fetchModels: NO_MODELS,
       fetchDesktop: NO_FETCH,
       runInteract: () => 127,
+      which: () => undefined,
+      runDetached: () => false,
+      probeWeb: async () => false,
+      desktopInstalled: () => false,
       prompt: vi.fn(),
       interactive: false,
       ...outputLines(lines),
@@ -203,6 +211,10 @@ describe('runWizard — non-interactive init', () => {
       fetchModels: NO_MODELS,
       fetchDesktop: NO_FETCH,
       runInteract: () => 127,
+      which: () => undefined,
+      runDetached: () => false,
+      probeWeb: async () => false,
+      desktopInstalled: () => false,
       prompt: vi.fn(),
       interactive: false,
       ...outputLines(lines),
@@ -230,6 +242,10 @@ describe('runWizard — non-interactive init', () => {
       fetchModels: NO_MODELS,
       fetchDesktop: NO_FETCH,
       runInteract: () => 127,
+      which: () => undefined,
+      runDetached: () => false,
+      probeWeb: async () => false,
+      desktopInstalled: () => false,
       prompt: vi.fn(),
       interactive: false,
       ...outputLines(lines),
@@ -314,6 +330,10 @@ describe('runWizard — integrations', () => {
       fetchModels: NO_MODELS,
       fetchDesktop: NO_FETCH,
       runInteract: () => 127,
+      which: () => undefined,
+      runDetached: () => false,
+      probeWeb: async () => false,
+      desktopInstalled: () => false,
       prompt: vi.fn(),
       interactive: false,
       ...outputLines(lines),
@@ -327,7 +347,7 @@ describe('runWizard — interactive', () => {
   it('asks for key, surface, integrations, then confirms', async () => {
     const home = await tempHome()
     const { run } = scriptedRun()
-    const { prompt, asked } = scriptedPrompt({ key: 'sk-typed', baseUrl: '', mode: 'web', plugins: [], proceed: true, modelManual: '' })
+    const { prompt, asked } = scriptedPrompt({ key: 'sk-typed', baseUrl: '', mode: 'web', plugins: [], proceed: true, modelManual: '', launchWeb: false })
     const lines: string[] = []
     const code = await runWizard({
       home,
@@ -338,12 +358,16 @@ describe('runWizard — interactive', () => {
       fetchModels: NO_MODELS,
       fetchDesktop: NO_FETCH,
       runInteract: () => 127,
+      which: () => undefined,
+      runDetached: () => false,
+      probeWeb: async () => false,
+      desktopInstalled: () => false,
       prompt,
       interactive: true,
       ...outputLines(lines),
     }, { ...OPTIONS })
     expect(code).toBe(0)
-    expect(asked.map(question => question.type)).toEqual(['input', 'password', 'input', 'list', 'multiselect', 'confirm', 'confirm', 'confirm'])
+    expect(asked.map(question => question.type)).toEqual(['input', 'password', 'input', 'list', 'multiselect', 'confirm', 'confirm', 'confirm', 'confirm'])
     expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-typed' })
     // The summary and the onboarding both bridge the two names: the surface
     // choice lands as a profile the user can start later.
@@ -364,6 +388,10 @@ describe('runWizard — interactive', () => {
       fetchModels: NO_MODELS,
       fetchDesktop: NO_FETCH,
       runInteract: () => 127,
+      which: () => undefined,
+      runDetached: () => false,
+      probeWeb: async () => false,
+      desktopInstalled: () => false,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -386,6 +414,10 @@ describe('runWizard — interactive', () => {
       fetchModels: NO_MODELS,
       fetchDesktop: NO_FETCH,
       runInteract: () => 127,
+      which: () => undefined,
+      runDetached: () => false,
+      probeWeb: async () => false,
+      desktopInstalled: () => false,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -431,6 +463,10 @@ describe('runWizard — interactive', () => {
       fetchModels: NO_MODELS,
       fetchDesktop: NO_FETCH,
       runInteract: () => 127,
+      which: () => undefined,
+      runDetached: () => false,
+      probeWeb: async () => false,
+      desktopInstalled: () => false,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -605,6 +641,10 @@ describe('runWizard — registry pick and install streaming', () => {
       fetchModels: NO_MODELS,
       fetchDesktop: NO_FETCH,
       runInteract: () => 127,
+      which: () => undefined,
+      runDetached: () => false,
+      probeWeb: async () => false,
+      desktopInstalled: () => false,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -642,6 +682,10 @@ describe('runWizard — registry pick and install streaming', () => {
       fetchModels: NO_MODELS,
       fetchDesktop: NO_FETCH,
       runInteract: () => 127,
+      which: () => undefined,
+      runDetached: () => false,
+      probeWeb: async () => false,
+      desktopInstalled: () => false,
       prompt,
       interactive: true,
       ...outputLines(lines),
@@ -1115,6 +1159,59 @@ describe('runWizard — marketplace and manage', () => {
     expect(lines.join('\n')).toContain('已加入')
   })
 
+  it('switches a lagging mirror to the official registry and retries the plugin', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } } }))
+    await writeFile(join(home, 'profiles', 'dzcf', '.npmrc'), 'registry=https://registry.npmmirror.com\n')
+    let lensCalls = 0
+    const run: RunFn = (command, args) => {
+      if (command === 'dsh' && args[0] === 'plugin' && args.includes('add') && args.includes('dsh-lens')) {
+        lensCalls += 1
+        return lensCalls === 1
+          ? { status: 1, stdout: '[ERR_PNPM_NO_MATCHING_VERSION] No matching version found for @ast-grep/cli-win32-arm64-msvc@0.45.2 while fetching it from https://registry.npmmirror.com/\n', stderr: 'dsh: pnpm failed in profile directory' }
+          : { status: 0, stdout: '', stderr: '' }
+      }
+      if (command === 'dsh' && args[0] === '-V') return { status: 0, stdout: '0.0.1-rc.4\n', stderr: '' }
+      if (command === 'dsh') return { status: 0, stdout: '', stderr: '' }
+      if (command === 'pnpm' || command.endsWith('/pnpm')) return { status: 0, stdout: '10.18.0\n', stderr: '' }
+      if (command === 'npm') return { status: 0, stdout: '11.0.0\n', stderr: '' }
+      return { status: null, stdout: '', stderr: `command not found: ${command}` }
+    }
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'marketplace', plugins: ['dsh-lens'],
+    })
+    expect(code).toBe(0)
+    expect(lensCalls).toBe(2)
+    expect(await readFile(join(home, 'profiles', 'dzcf', '.npmrc'), 'utf8')).toContain('registry=https://registry.npmjs.org')
+    expect(lines.join('\n')).toContain('切换为官方源')
+  })
+
+  it('does not switch the registry when it already is the official one', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } } }))
+    await writeFile(join(home, 'profiles', 'dzcf', '.npmrc'), 'registry=https://registry.npmjs.org\n')
+    const run: RunFn = (command, args) => {
+      if (command === 'dsh' && args[0] === 'plugin' && args.includes('add') && args.includes('dsh-lens')) {
+        return { status: 1, stdout: '[ERR_PNPM_NO_MATCHING_VERSION] No matching version found\n', stderr: 'dsh: pnpm failed in profile directory' }
+      }
+      if (command === 'dsh' && args[0] === '-V') return { status: 0, stdout: '0.0.1-rc.4\n', stderr: '' }
+      if (command === 'dsh') return { status: 0, stdout: '', stderr: '' }
+      if (command === 'pnpm' || command.endsWith('/pnpm')) return { status: 0, stdout: '10.18.0\n', stderr: '' }
+      if (command === 'npm') return { status: 0, stdout: '11.0.0\n', stderr: '' }
+      return { status: null, stdout: '', stderr: `command not found: ${command}` }
+    }
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'marketplace', plugins: ['dsh-lens'],
+    })
+    expect(code).toBe(1)
+    expect(await readFile(join(home, 'profiles', 'dzcf', '.npmrc'), 'utf8')).toContain('registry=https://registry.npmjs.org')
+    expect(lines.join('\n')).not.toContain('切换为官方源')
+  })
+
   it('dsh-tui launches the default profile with a config-source notice', async () => {
     const home = await tempHome()
     await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
@@ -1135,11 +1232,6 @@ describe('runWizard — marketplace and manage', () => {
     const base = scriptedRun({
       bash: (args) => {
         const cmd = args.join(' ')
-        if (cmd.includes('command -v dsh-tui')) {
-          return installed
-            ? { status: 0, stdout: '/usr/local/bin/dsh-tui\n', stderr: '' }
-            : { status: 0, stdout: '', stderr: '' }
-        }
         if (cmd.includes('readlink')) {
           return { status: 0, stdout: '/usr/local/lib/node_modules/dsh-zcf/lib/cli.cjs\n', stderr: '' }
         }
@@ -1155,7 +1247,7 @@ describe('runWizard — marketplace and manage', () => {
     })
     const { prompt } = scriptedPrompt({ key: 'sk-typed-1234567890', baseUrl: '', modelManual: '', mode: 'web', plugins: [], proceed: true, globalShortcut: true, keepGoing: true })
     const lines: string[] = []
-    const code = await runWizard(await context({ home, run: base.run, prompt, interactive: true, ...outputLines(lines) }), {
+    const code = await runWizard(await context({ home, run: base.run, prompt, interactive: true, which: (name) => name === 'dsh-tui' && installed ? '/usr/local/bin/dsh-tui' : undefined, ...outputLines(lines) }), {
       ...OPTIONS, key: 'sk-test-1234', mode: 'web', yes: false, selfVersion: '0.4.3',
     })
     expect(code).toBe(0)
@@ -1263,6 +1355,86 @@ describe('runWizard — marketplace and manage', () => {
   })
 })
 
+describe('runWizard — web launch orchestration', () => {
+  /** The interactive init answers that reach the web onboarding untouched. */
+  const webPromptAnswers = { baseUrl: '', key: 'sk-web-0001', modelManual: '', mode: 'web', plugins: [], proceed: true, globalShortcut: false }
+
+  it('reuses a running web service instead of starting another', async () => {
+    const home = await tempHome()
+    const detached: Array<readonly string[]> = []
+    const { prompt } = scriptedPrompt(webPromptAnswers)
+    const lines: string[] = []
+    const code = await runWizard(await context({
+      home,
+      prompt,
+      interactive: true,
+      runDetached: (command, args) => { detached.push([command, ...args]); return true },
+      probeWeb: async () => true,
+      ...outputLines(lines),
+    }), { ...OPTIONS, action: 'init', mode: 'web' })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('Web 服务已在运行')
+    expect(lines.join('\n')).toContain('http://127.0.0.1:3080')
+    expect(detached).toHaveLength(0)
+  })
+
+  it('launches the web service in the background and waits for readiness', async () => {
+    const home = await tempHome()
+    let probes = 0
+    const detached: Array<readonly string[]> = []
+    const { prompt, asked } = scriptedPrompt({ ...webPromptAnswers, launchWeb: true })
+    const lines: string[] = []
+    const code = await runWizard(await context({
+      home,
+      prompt,
+      interactive: true,
+      runDetached: (command, args) => { detached.push([command, ...args]); return true },
+      // First probe (pre-check) says the port is free; the readiness poll
+      // answers after one retry tick.
+      probeWeb: async () => { probes += 1; return probes > 1 },
+      ...outputLines(lines),
+    }), { ...OPTIONS, action: 'init', mode: 'web' })
+    expect(code).toBe(0)
+    expect(detached).toEqual([['dsh', '--profile', 'dzcf', 'web']])
+    expect(asked.some(question => question.name === 'launchWeb')).toBe(true)
+    expect(lines.join('\n')).toContain('正在后台启动')
+    expect(lines.join('\n')).toContain('Web 界面已就绪')
+  })
+
+  it('suggests the manual command when the service cannot be spawned', async () => {
+    const home = await tempHome()
+    const { prompt } = scriptedPrompt({ ...webPromptAnswers, launchWeb: true })
+    const lines: string[] = []
+    const code = await runWizard(await context({
+      home,
+      prompt,
+      interactive: true,
+      runDetached: () => false,
+      probeWeb: async () => false,
+      desktopInstalled: () => false,
+      ...outputLines(lines),
+    }), { ...OPTIONS, action: 'init', mode: 'web' })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('dsh --profile dzcf web')
+    expect(lines.join('\n')).toContain('未在等待窗口内就绪')
+  })
+
+  it('stays with the printed manual command in non-interactive runs', async () => {
+    const home = await tempHome()
+    let probes = 0
+    const lines: string[] = []
+    const code = await runWizard(await context({
+      home,
+      probeWeb: async () => { probes += 1; return true },
+      ...outputLines(lines),
+    }), { ...OPTIONS, action: 'init', key: 'sk-web-0010', mode: 'web', yes: true })
+    expect(code).toBe(0)
+    expect(probes).toBe(0)
+    expect(lines.join('\n')).not.toContain('已在运行')
+    expect(lines.join('\n')).toContain('dsh web')
+  })
+})
+
 describe('runWizard — app surface (DSH Desktop installer)', () => {
   /** Scripted fetch answering the cn HEAD resolve and the installer GET. */
   const scriptedDesktopFetch = (): { fetch: typeof fetch; savedName: string } => {
@@ -1311,6 +1483,44 @@ describe('runWizard — app surface (DSH Desktop installer)', () => {
     })
     expect(code).toBe(0)
     expect(lines.join('\n')).toContain('下载 DSH Desktop 安装包（mac，来源 cn）')
+  })
+
+  it('skips the whole download when DSH Desktop is already installed', async () => {
+    const home = await tempHome()
+    const lines: string[] = []
+    const code = await runWizard(await context({
+      home,
+      desktopInstalled: () => true,
+      fetchDesktop: NO_FETCH,
+      ...outputLines(lines),
+    }), { ...OPTIONS, action: 'init', key: 'sk-app-0003', mode: 'app', yes: true })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('检测到已安装的 DSH Desktop')
+    expect(lines.join('\n')).toContain('打开 DSH Desktop')
+  })
+
+  it('offers to open the downloaded installer and launches it detached', async () => {
+    const home = await tempHome()
+    process.env.DZCF_DESKTOP_DIR = await mkdtemp(join(tmpdir(), 'dzcf-desktop-'))
+    const detached: Array<readonly string[]> = []
+    const { prompt } = scriptedPrompt({ baseUrl: '', key: 'sk-app-0004', modelManual: '', mode: 'app', plugins: [], proceed: true, globalShortcut: false, download: true, openInstaller: true })
+    const scripted = scriptedDesktopFetch()
+    const lines: string[] = []
+    const code = await runWizard(await context({
+      home,
+      prompt,
+      interactive: true,
+      fetchDesktop: scripted.fetch,
+      runDetached: (command, args) => { detached.push([command, ...args]); return true },
+      ...outputLines(lines),
+    }), { ...OPTIONS, action: 'init', key: 'sk-app-0004', mode: 'app', desktopPlatform: 'mac' })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('已启动安装程序')
+    // On the POSIX hosts the tests run on, the saved installer is spawned
+    // directly (the `open` path is macOS-only).
+    expect(detached).toHaveLength(1)
+    expect(String(detached[0]?.[0])).toContain(scripted.savedName)
+    expect(detached[0]).toHaveLength(1)
   })
 
   it('downloads the installer when --desktop-platform points at a supported machine', async () => {
@@ -1425,9 +1635,10 @@ describe('runWizard — existing-user protection', () => {
 })
 
 describe('runWizard — dsh-tui launcher ownership', () => {
+  /** The command exists on PATH; readlink resolves it to `resolved`. */
+  const whichOverride = (): ((name: string) => string | undefined) => (name) => name === 'dsh-tui' ? '/home/adam/.npm-global/bin/dsh-tui' : undefined
   const bashOverride = (resolved: string): ((args: readonly string[]) => RunResult) => (args) => {
     const cmd = args.join(' ')
-    if (cmd.includes('command -v dsh-tui')) return { status: 0, stdout: '/home/adam/.npm-global/bin/dsh-tui\n', stderr: '' }
     if (cmd.includes('readlink')) return { status: 0, stdout: `${resolved}\n`, stderr: '' }
     return { status: 0, stdout: '', stderr: '' }
   }
@@ -1436,7 +1647,7 @@ describe('runWizard — dsh-tui launcher ownership', () => {
     const home = await tempHome()
     const { run, calls } = scriptedRun({ bash: bashOverride('/home/adam/.npm-global/lib/node_modules/@deepseek-harness-tui/dsh-tui/bin/dsh-tui.js') })
     const lines: string[] = []
-    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), {
+    const code = await runWizard(await context({ home, run, which: whichOverride(), ...outputLines(lines) }), {
       ...OPTIONS, action: 'init', key: 'sk-foreign-0005', mode: 'tui', yes: true,
     })
     expect(code).toBe(0)
@@ -1449,12 +1660,25 @@ describe('runWizard — dsh-tui launcher ownership', () => {
     const { run } = scriptedRun({ bash: bashOverride('/home/adam/.npm-global/lib/node_modules/dsh-zcf/lib/cli.cjs') })
     const { prompt, asked } = scriptedPrompt({ baseUrl: '', key: 'sk-own-0006', modelManual: '', mode: 'tui', plugins: [], proceed: true })
     const lines: string[] = []
-    const code = await runWizard(await context({ home, run, prompt, interactive: true, ...outputLines(lines) }), {
+    const code = await runWizard(await context({ home, run, prompt, interactive: true, which: whichOverride(), ...outputLines(lines) }), {
       ...OPTIONS, action: 'init',
     })
     expect(code).toBe(0)
     expect(lines.join('\n')).toContain('已全局就绪')
     expect(asked.filter(question => question.name === 'globalShortcut')).toHaveLength(0)
+  })
+
+  it('reads the cmd-shim body to claim ownership on Windows', async () => {
+    // npm's cmd-shim embeds its target; ownership is decided from the file.
+    const shimDir = await mkdtemp(join(tmpdir(), 'dzcf-cmdshim-'))
+    const shim = join(shimDir, 'dsh-tui.cmd')
+    await writeFile(shim, '@ECHO off\r\nnode "%~dp0\\..\\node_modules\\dsh-zcf\\lib\\cli.cjs" %*\r\n')
+    const foreignShim = join(shimDir, 'foreign.cmd')
+    await writeFile(foreignShim, '@node "%~dp0\\other-project\\bin.js" %*\r\n')
+    const run = scriptedRun().run
+    expect(globalShortcutReady(run, () => shim, 'win32')).toBe(true)
+    expect(globalShortcutReady(run, () => foreignShim, 'win32')).toBe(false)
+    await rm(shimDir, { recursive: true, force: true })
   })
 })
 

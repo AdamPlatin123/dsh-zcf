@@ -48,8 +48,8 @@ dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
 2. **收集输入**——DeepSeek API Key（掩码输入）、可选的 `DEEPSEEK_BASE_URL` 覆盖，以及运行形态：`tui` 终端 UI（Claude Code 风格）、`web` 浏览器 UI、或 `app` DSH Desktop 桌面客户端（anywhere-labs 的 Electron 应用：向导按平台自动下载安装包到 `~/Downloads` 并引导安装；仅 macOS Universal 与 Windows x64 有安装包，其它平台自动落回 web 组合）。交互模式逐项询问；非交互模式必须有 `--key` 和 `--mode`，缺失即报错退出。
 3. **写入凭据**到 `$DSH_HOME/.credentials.yaml`——`dsh-credentials-local` 读取的受管文档，仅属主可读写（0700 目录下的 0600 文件）。未涉及的既有条目原样保留；写入在跨进程写锁内先重读再原子提交。Key 绝不回显：摘要里始终是掩码（`sk-***4321`）。
 4. **验证 profile**：执行 `dsh --profile <mode> --dump-default-config`——内置的 `web`/`headless` profile 首次启动会自动初始化，所以一次成功的 dump 就能证明零配置闭环，无需任何模型调用。失败时输出 dsh 的 stderr；已写入的凭据保留。
-5. **下载与引导**（app 形态）——解析 DSH Desktop 安装包（默认 dshdesktop.cn 源，`--desktop-source github` 可切换；GitHub 源带 sha256 校验），带进度下载到 `~/Downloads`；`--desktop-platform mac|win` 可为其它机器代下。无安装包的平台（Linux、Windows on ARM）说明后继续，onboarding 指向 `dsh web`。
-6. **打印下一步**——`dsh web`，或 `dsh --profile dzcf`（tui 形态；profile 默认名 dzcf，可用 `--profile` 改）；app 形态打印安装包位置与 DSH Desktop 首启指引（凭据与 profile 同一 DSH 主目录，装好即用）。
+5. **下载与引导**（app 形态）——已安装的 DSH Desktop（Windows 的 `%LOCALAPPDATA%\Programs\DSH Desktop\`、macOS 的 `/Applications/DSH Desktop.app`）会被直接检测到并跳过整条下载链；否则解析安装包（默认 dshdesktop.cn 源，`--desktop-source github` 可切换；GitHub 源带 sha256 校验），带进度下载到 `~/Downloads`，交互模式下询问「立即打开安装程序」并代为唤起（macOS 挂载 dmg / Windows 直接运行 Setup.exe，安装向导仍由你操作）。`--desktop-platform mac|win` 可为其它机器代下。无安装包的平台（Linux、Windows on ARM）说明后继续，onboarding 指向 `dsh web`。
+6. **收尾编排**——web 形态：端口 3080 已有服务则直接告知地址；交互模式询问「现在启动 Web 界面吗」，确认后后台拉起 `dsh --profile <名字> web` 并轮询就绪（最多 15 秒），向导退出后服务仍存活；非交互模式保持打印手动命令。tui 形态指引 `dsh --profile <名字>`（profile 默认名 dzcf，可用 `--profile` 改）；app 形态打印安装包位置与 DSH Desktop 首启指引（凭据与 profile 同一 DSH 主目录，装好即用）。插件安装若因镜像缺版本失败（`ERR_PNPM_NO_MATCHING_VERSION`，冷门平台包同步滞后数天），该 profile 的安装源会**显式宣告并**切换为官方源重试一次，后续安装继承官方源。
 
 除此之外不碰任何东西：不重写 profile 文件、不生成 `cordis.yml`，向导自身也从不调用模型 API。
 
@@ -142,6 +142,7 @@ dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
 - Base URL 输入只校验 http(s) 格式，不检查可达性与 Key 有效性——首次真实请求才会暴露这类失败。
 - 凭据写入是原子的但非崩溃持久（继承自 `dsh-atomic-write`）；文档每次启动都会重读。
 - Windows 下跳过 0600/0700 权限校验，与 `dsh-credentials-local` 一致。
+- Windows 上向导全流程可用（0.5.5 起：npm/pnpm/dsh 的 `.cmd` 形态与命令探测均已跨平台化），但 `dsh-tui`/`dzcf-tui` 命令直达 TUI 的转发依赖 POSIX 符号链接形态，Windows 的 npm `.cmd` shim 下不生效——请用 `dsh-zcf tui`（或菜单选择）等效启动；根治需拆分 bin 入口，计划下个版本。
 
 ## 许可证
 
