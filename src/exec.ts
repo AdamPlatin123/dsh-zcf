@@ -29,20 +29,23 @@ export type RunFn = (
 
 /**
  * Characters cmd.exe re-interprets even inside double quotes (`%VAR%`,
- * `!VAR!`, and friends). Node escapes `"` as `\"` when it serializes argv,
- * which cmd does not understand either — so every one of these in a command
- * or argument is rejected outright. Everything the wizard passes (package
- * names, URLs, paths, profile names) stays inside the safe set, and a
- * violation fails loud instead of executing a rewritten command line.
+ * `!VAR!`, and friends). Any of these in a command or argument is rejected
+ * outright — everything the wizard passes (package names, URLs, paths,
+ * profile names) stays inside the safe set, and a violation fails loud
+ * instead of executing a rewritten command line.
  */
 const CMD_FORBIDDEN = /[&|<>^%!"]/
 
 /**
  * Wrap one command line for cmd.exe on Windows, where npm/pnpm/dsh are
  * `.cmd` shims that CreateProcess cannot launch directly (Node refuses
- * shell-less `.cmd`/`.bat` spawns since the CVE-2024-27980 fix). `/d /s /c`
- * plus per-argument quoting is the arrangement cmd documents for preserving
- * quotes, so arguments with spaces survive.
+ * shell-less `.cmd`/`.bat` spawns since the CVE-2024-27980 fix).
+ *
+ * The command is assembled into ONE line passed as the single `/c` operand
+ * with `windowsVerbatimArguments`, so Node never re-quotes it into the `\"`
+ * escapes cmd cannot parse. Arguments containing spaces get their own inner
+ * quotes (parsed by the child, not by cmd); the line itself carries no
+ * outer quotes, so cmd's own quote-stripping rules never trigger.
  * @param command - executable name or path.
  * @param args - arguments.
  * @returns the `cmd.exe` invocation to spawn instead.
@@ -53,7 +56,8 @@ export function windowsSpawnArgs(command: string, args: readonly string[]): { fi
   for (const part of parts) {
     if (CMD_FORBIDDEN.test(part)) throw new Error(`dsh-zcf: refusing to run through cmd.exe (metacharacter in ${JSON.stringify(part)})`)
   }
-  return { file: 'cmd.exe', argv: ['/d', '/s', '/c', ...parts.map(part => `"${part}"`)] }
+  const line = parts.map(part => (part.includes(' ') ? `"${part}"` : part)).join(' ')
+  return { file: 'cmd.exe', argv: ['/d', '/s', '/c', line] }
 }
 
 /**
@@ -68,7 +72,7 @@ export function runInteractive(command: string, args: readonly string[]): number
   if (process.platform === 'win32') {
     try {
       const wrapped = windowsSpawnArgs(command, args)
-      const result = spawnSync(wrapped.file, [...wrapped.argv], { stdio: 'inherit', windowsHide: true })
+      const result = spawnSync(wrapped.file, [...wrapped.argv], { stdio: 'inherit', windowsHide: true, windowsVerbatimArguments: true })
       return result.status ?? 1
     } catch (error) {
       return 1
@@ -114,7 +118,7 @@ export function runCommand(
       return { status: null, stdout: '', stderr: (error as Error).message }
     }
   }
-  const result = spawnSync(file, argv, process.platform === 'win32' ? { ...options, windowsHide: true } : options)
+  const result = spawnSync(file, argv, process.platform === 'win32' ? { ...options, windowsHide: true, windowsVerbatimArguments: true } : options)
   if (result.error !== undefined) {
     return { status: null, stdout: '', stderr: result.error.message }
   }
@@ -263,7 +267,7 @@ export function installDshStreaming(pm: string, args: readonly string[], onLine:
         return
       }
     }
-    const child = spawn(file, argv, { stdio: ['ignore', 'pipe', 'pipe'], ...(windows ? { windowsHide: true } : {}) })
+    const child = spawn(file, argv, { stdio: ['ignore', 'pipe', 'pipe'], ...(windows ? { windowsHide: true, windowsVerbatimArguments: true } : {}) })
     let stdout = ''
     let stderr = ''
     let pending = ''
@@ -351,7 +355,7 @@ export function runDetached(command: string, args: readonly string[], env?: Read
       stdio: 'ignore',
       detached: true,
       env: env === undefined ? process.env : { ...process.env, ...env },
-      ...(windows ? { windowsHide: true } : {}),
+      ...(windows ? { windowsHide: true, windowsVerbatimArguments: true } : {}),
     })
     child.unref()
     return true

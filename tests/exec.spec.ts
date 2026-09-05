@@ -17,15 +17,17 @@ async function tempDir(): Promise<string> {
 }
 
 describe('windowsSpawnArgs', () => {
-  it('wraps command and arguments in quoted cmd.exe form', () => {
+  it('assembles the command into one verbatim /c line', () => {
     const wrapped = windowsSpawnArgs('npm', ['install', '--global', 'dsh-zcf@0.5.5', '--registry=https://registry.npmjs.org'])
     expect(wrapped.file).toBe('cmd.exe')
-    expect(wrapped.argv).toEqual(['/d', '/s', '/c', '"npm"', '"install"', '"--global"', '"dsh-zcf@0.5.5"', '"--registry=https://registry.npmjs.org"'])
+    // One /c operand holding the whole line, no outer quotes: Node's argv
+    // serialization must never re-quote it (cmd cannot parse \" escapes).
+    expect(wrapped.argv).toEqual(['/d', '/s', '/c', 'npm install --global dsh-zcf@0.5.5 --registry=https://registry.npmjs.org'])
   })
 
-  it('keeps paths with spaces as single quoted arguments', () => {
-    const wrapped = windowsSpawnArgs('C:\\Program Files\\nodejs\\node.exe', ['C:\\Users\\Adam\\My File.js'])
-    expect(wrapped.argv.at(-1)).toBe('"C:\\Users\\Adam\\My File.js"')
+  it('quotes only the arguments that contain spaces', () => {
+    const wrapped = windowsSpawnArgs('npm', ['install', '--prefix', 'C:\\Users\\Adam Smith\\.zcf\\pnpm10', 'pnpm@10'])
+    expect(wrapped.argv[3]).toBe('npm install --prefix "C:\\Users\\Adam Smith\\.zcf\\pnpm10" pnpm@10')
   })
 
   it.each(['&', '|', '<', '>', '^', '%VAR%', '!', '"quoted"'])('rejects cmd metacharacters in arguments (%s)', (poison) => {
