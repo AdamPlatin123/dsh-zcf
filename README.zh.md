@@ -142,7 +142,7 @@ dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
 - Base URL 输入只校验 http(s) 格式，不检查可达性与 Key 有效性——首次真实请求才会暴露这类失败。
 - 凭据写入是原子的但非崩溃持久（继承自 `dsh-atomic-write`）；文档每次启动都会重读。
 - Windows 下跳过 0600/0700 权限校验，与 `dsh-credentials-local` 一致。
-- Windows 上向导全流程可用（0.5.5 起：npm/pnpm/dsh 的 `.cmd` 形态与命令探测均已跨平台化），但 `dsh-tui`/`dzcf-tui` 命令直达 TUI 的转发依赖 POSIX 符号链接形态，Windows 的 npm `.cmd` shim 下不生效——请用 `dsh-zcf tui`（或菜单选择）等效启动；根治需拆分 bin 入口，计划下个版本。
+- 0.5.7 起三个 bin（`dsh-zcf` / `dsh-tui` / `dzcf-tui`）各自独立入口文件（身份由文件决定）——此前共享入口靠 `argv[1]` 后缀判定 bin 名，被 npx 的多 bin 解析（`npx dsh-zcf` 可能实际执行 `.bin/dsh-tui`）与 Windows `.cmd` shim 的路径形态同时击穿，导致 Linux/macOS 新用户 `npx dsh-zcf` 误入 TUI 启动并报「默认 profile 不存在」。
 
 ## 许可证
 

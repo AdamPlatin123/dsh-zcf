@@ -1712,9 +1712,20 @@ describe('runWizard — credentials flow keep semantics', () => {
 })
 
 describe('bin launcher wiring', () => {
-  it('points bin at the CommonJS version gate, which exists', async () => {
+  it('gives every bin its own entry file — identity by file, no argv guessing', async () => {
     const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { bin: Record<string, string> }
+    // npx resolves a multi-bin package to an arbitrary .bin link (field
+    // report: `npx dsh-zcf` executed .bin/dsh-tui), and Windows shims present
+    // the resolved cli.cjs path — a shared entry cannot tell who it is.
     expect(manifest.bin['dsh-zcf']).toBe('lib/cli.cjs')
+    expect(manifest.bin['dsh-tui']).toBe('lib/dsh-tui.cjs')
+    expect(manifest.bin['dzcf-tui']).toBe('lib/dzcf-tui.cjs')
     await expect(access(new URL('../src/cli.cjs', import.meta.url))).resolves.toBeUndefined()
+    const launcher = await readFile(new URL('../src/dsh-tui.cjs', import.meta.url), 'utf8')
+    expect(launcher).toContain("splice(2, 0, 'tui')")
+    expect(launcher).toContain("require('./cli.cjs')")
+    // The gate itself must not forward based on argv[1] anymore.
+    const gate = await readFile(new URL('../src/cli.cjs', import.meta.url), 'utf8')
+    expect(gate).not.toContain('endsWith')
   })
 })

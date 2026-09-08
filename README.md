@@ -141,7 +141,7 @@ The wizard is a menu-driven CLI over three injectable seams — `RunFn` (subproc
 - The base-URL prompt accepts any http(s) URL; reachability and key validity are not checked — the first real request owns that failure.
 - Credential writes are atomic but not crash-durable (inherited from `dsh-atomic-write`); the document is re-read on every boot.
 - On Windows the 0600/0700 permission checks are skipped, matching `dsh-credentials-local`.
-- On Windows the full wizard flow works (0.5.5+: the `.cmd` shapes of npm/pnpm/dsh and the command probes are platform-aware), but the `dsh-tui`/`dzcf-tui` straight-to-TUI bin forwarding relies on POSIX symlink shapes and never triggers under Windows' npm `.cmd` shims — use `dsh-zcf tui` (or the menu) instead; a proper fix needs split bin entries and is planned for the next release.
+- Since 0.5.7 the three bins (`dsh-zcf` / `dsh-tui` / `dzcf-tui`) are separate entry files — identity by file. The former shared entry guessed the bin from an argv[1] suffix, which npx's multi-bin resolution (an `npx dsh-zcf` invocation could actually execute `.bin/dsh-tui`) and Windows' `.cmd` shim path shapes both defeated, sending fresh Linux/macOS users of `npx dsh-zcf` into the TUI launcher and its "default profile missing" dead end.
 
 ## License
 

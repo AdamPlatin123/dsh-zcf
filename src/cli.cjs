@@ -13,12 +13,8 @@ if (!satisfied) {
   console.error('升级 / upgrade: nvm install 22 && nvm use 22, or https://github.com/nodesource/distributions')
   process.exit(1)
 }
-// Two more bin names over this same launcher: `dsh-tui` (the primary) and
-// `dzcf-tui` (an alias that stays available when a foreign package owns the
-// dsh-tui name) start the default profile's terminal UI without any
-// subcommand typing.
-const launcher = process.argv[1] ?? ''
-if ((launcher.endsWith('dsh-tui') || launcher.endsWith('dzcf-tui')) && !process.argv.slice(2).includes('tui')) {
-  process.argv.splice(2, 0, 'tui')
-}
+// The `dsh-zcf` bin entry only: the TUI launcher bins (`dsh-tui`,
+// `dzcf-tui`) are separate entry files that inject their default action and
+// require this gate. Identity-by-file replaced the old argv[1] suffix check,
+// which npx's multi-bin resolution and Windows' .cmd shims both defeated.
 import('./bin.js')
