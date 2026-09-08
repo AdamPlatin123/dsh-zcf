@@ -13,13 +13,13 @@ import { readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { dshHomeDisplay } from '@deepseek-ai/dsh-home-paths'
 import { renderBanner, renderMenuLines, type MenuAction } from './banner.ts'
-import { CAPABILITIES, capabilityOf, type Capability, type PatchRow, type Surface } from './capabilities.ts'
+import { CAPABILITIES, capabilityOf, SURFACE_BUNDLES, type Capability, type PatchRow, type Surface } from './capabilities.ts'
 import { CATEGORY_LABELS, RECOMMENDED_PLUGINS, isTuiProfile, recommendedPluginOf, type RecommendedPlugin } from './marketplace.ts'
 import { isHttpUrl, type DzcfAction, type DzcfOptions } from './args.ts'
 import { API_KEY_REF, BASE_URL_REF, MESSAGES, PUBLIC_BASE_URL, translate, type Lang } from './i18n.ts'
 import type { PromptFn, PromptOutcome, PromptQuestion } from './ui.ts'
 import type { RunFn, RunResult } from './exec.ts'
-import { detectPackageManager, dshAvailable, installDshArgs, REGISTRY_OPTIONS } from './exec.ts'
+import { detectPackageManager, dshAvailable, installDshArgs, REGISTRY_OPTIONS, resolveUpstreamVersion } from './exec.ts'
 import { ensureHomeDirectory, maskKey, migrateCredentialsIfNeeded, needsV1Migration, readCredentials, writeCredentials } from './credentials.ts'
 import { writeEnvFile } from './dotenv.ts'
 import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, readDefaultProfile, readProfileRegistry, removePlugin, setPnpmBinOverride, writeDefaultProfile, writeProfileNpmrc } from './profile.ts'
@@ -843,7 +843,8 @@ async function createProfileWithRecovery(
     err(t('verifyFailed', { mode: profile, stderr: detail }))
     err(t('profileBrokenHint', { path: `${dshHomeDisplay(home)}/profiles/${profile}` }))
   }
-  let create = createProfile(run, surface, profile)
+  const bundleSpec = await resolveSurfaceBundleSpec(context, t, surface)
+  let create = createProfile(run, surface, profile, bundleSpec)
   if (create.status === 0) {
     await writeDefaultProfile(home, profile)
     return true
@@ -861,7 +862,7 @@ async function createProfileWithRecovery(
   }
   out(t('profileRecovering', { profile }))
   await rm(join(home, 'profiles', profile), { recursive: true, force: true })
-  create = createProfile(run, surface, profile)
+  create = createProfile(run, surface, profile, bundleSpec)
   if (create.status !== 0) {
     fail(create)
     return false
@@ -870,6 +871,31 @@ async function createProfileWithRecovery(
   await writeDefaultProfile(home, profile)
   out(t('profileRecovered', { profile }))
   return true
+}
+
+/**
+ * Resolve the surface bundle's install spec at run time. The static ranges
+ * exist as a safety net (the web bundle's `latest` tag points at a broken
+ * build and prerelease carets cannot cross minor lines), so for the official
+ * web-composed surfaces the wizard asks the registry for the newest usable
+ * version, aligned with the running launcher's own line — the exact
+ * mismatch (an old pinned bundle under a rolled-forward global dsh) that
+ * double-registered services on real machines. The tui bundle keeps a
+ * healthy, independent version line and stays as-is.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param surface - runtime surface.
+ * @returns the install spec (`pkg` or `pkg@version`) for the bundle.
+ */
+async function resolveSurfaceBundleSpec(context: WizardContext, t: T, surface: Surface): Promise<string> {
+  const staticSpec = SURFACE_BUNDLES[surface]
+  if (surface === 'tui') return staticSpec
+  const pkg = staticSpec.split('@').slice(0, 2).join('@')
+  const dshVersion = context.run('dsh', ['-V']).stdout.trim().split('\n')[0] ?? ''
+  const resolved = await resolveUpstreamVersion(pkg, dshVersion, context.fetchDesktop)
+  if (resolved === undefined) return staticSpec
+  context.out(t('bundleVersionResolved', { pkg, version: resolved }))
+  return `${pkg}@${resolved}`
 }
 
 /**
@@ -1366,8 +1392,11 @@ async function offerLaunchWeb(context: WizardContext, t: T, options: DzcfOptions
   const outcome = await askOne(context.prompt, { type: 'confirm', name: 'launchWeb', message: t('webLaunchAsk'), default: true })
   if (outcome.status === 'cancelled' || outcome.value.launchWeb !== true) return
   out(t('webStarting'))
-  if (!context.runDetached('dsh', ['--profile', profile, 'web'])) {
-    out(t('webStartFailedFallback', { command: `dsh --profile ${profile} web`, url: WEB_URL }))
+  // `dsh --profile <name> web` is rejected by the launcher (the web
+  // subcommand is an alias of --profile web); a bare boot of the
+  // web-composed profile is the correct form.
+  if (!context.runDetached('dsh', ['--profile', profile])) {
+    out(t('webStartFailedFallback', { command: `dsh --profile ${profile}`, url: WEB_URL }))
     return
   }
   const deadline = Date.now() + waitMs
@@ -1378,7 +1407,7 @@ async function offerLaunchWeb(context: WizardContext, t: T, options: DzcfOptions
       return
     }
   }
-  out(t('webStartFailedFallback', { command: `dsh --profile ${profile} web`, url: WEB_URL }))
+  out(t('webStartFailedFallback', { command: `dsh --profile ${profile}`, url: WEB_URL }))
 }
 
 /** Profile names besides the active one, for the launch-alternatives line. */

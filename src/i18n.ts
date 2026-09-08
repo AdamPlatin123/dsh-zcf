@@ -183,6 +183,10 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '镜像安装源缺少所需版本（同步滞后）。已将该 profile 的安装源切换为官方源 {to} 并重试——后续安装也会走官方源。',
     'en': 'The pinned mirror registry lacks a required version (sync lag). This profile\'s registry is now switched to the official {to} and retried — later installs inherit it.',
   },
+  bundleVersionResolved: {
+    'zh-CN': '已解析 {pkg} 的最新可用版本：{version}（与已安装的 dsh 版本线对齐；解析失败时会回退到内置版本区间）',
+    'en': 'Resolved the newest usable {pkg}: {version} (aligned with the installed dsh line; the built-in range stays as the fallback)',
+  },
   webAlreadyRunning: {
     'zh-CN': '✓ Web 服务已在运行：{url}（浏览器打开即可；重启它会先停掉后台进程）',
     'en': '✓ The web service is already running: {url} (open it in a browser; restarting it means stopping the background process first)',
@@ -488,8 +492,8 @@ export const MESSAGES: MessageTable = {
     'en': 'The default profile does not exist ({path}). Run npx dsh-zcf to initialize first.',
   },
   onboardingLaunchWeb: {
-    'zh-CN': '启动 Web 界面：`dsh web`，然后浏览器打开 http://127.0.0.1:3080',
-    'en': 'Launch the web UI: `dsh web`, then open http://127.0.0.1:3080',
+    'zh-CN': '启动 Web 界面：`dsh --profile <名字>`（本 profile 已组好 web 组合，默认 http://127.0.0.1:3080）',
+    'en': 'Launch the web UI: `dsh --profile <name>` (this profile composes the web app; default http://127.0.0.1:3080)',
   },
   onboardingLaunchDesktop: {
     'zh-CN': '安装 DSH Desktop：打开下载的安装包（DMG 拖入 Applications / NSIS 按提示安装），首启自动就绪——本向导写入的凭据与 profile 在同一 DSH 主目录，打开即可对话。安装包位置：{path}（托盘常驻；「退出」才会结束应用和后台服务）',

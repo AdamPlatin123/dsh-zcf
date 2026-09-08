@@ -379,3 +379,68 @@ export async function probeWebReady(url: string, timeoutMs = 3000): Promise<bool
     return false
   }
 }
+
+/** How long an upstream metadata lookup may take before counting as failed. */
+const UPSTREAM_TIMEOUT_MS = 8000
+
+/**
+ * Resolve the newest sane version of an official npm bundle at install time.
+ * Static ranges lag: the web bundle's `^0.1.0-rc.6` caret can never reach the
+ * 0.1.2 line the launcher pairs with (semver keeps prerelease ranges on their
+ * own major.minor.patch), and upstream's `latest` tag still points at a
+ * broken build. The lookup therefore reads the official registry's metadata
+ * (mirror dist-tags lag behind) and walks, in order: the `next` tag (where
+ * the paired line ships), the `latest` tag, then the highest version that is
+ * neither an alpha nor a beta. `lineHint`, when given (the running `dsh -V`,
+ * e.g. `0.1.2-rc.1`), prefers the highest non-alpha version sharing its
+ * major.minor — the exact mismatch that broke real machines.
+ * @param pkg - npm package name of the bundle.
+ * @param lineHint - launcher version to align with (major.minor), when known.
+ * @param fetchImpl - fetch implementation (injectable for tests).
+ * @param registry - metadata registry base URL.
+ * @returns the resolved version string, or undefined when unreachable — the
+ *          caller keeps its static-range fallback for that case.
+ */
+export async function resolveUpstreamVersion(pkg: string, lineHint?: string, fetchImpl: (url: string) => Promise<Response> = fetch, registry = 'https://registry.npmjs.org'): Promise<string | undefined> {
+  let document: { 'dist-tags'?: Record<string, string>; versions?: string[] | Record<string, unknown> }
+  try {
+    // The injected fetcher (the wizard context's desktop fetch slot) carries
+    // no signal of its own, so the timeout is a race around the call.
+    const response = await Promise.race([
+      fetchImpl(`${registry}/${pkg.replace('/', '%2F')}`),
+      new Promise<Response>((_, reject) => { setTimeout(() => { reject(new Error('upstream metadata timeout')) }, UPSTREAM_TIMEOUT_MS) }),
+    ])
+    if (!response.ok) return undefined
+    document = await response.json() as typeof document
+  } catch {
+    return undefined
+  }
+  const tags = document['dist-tags'] ?? {}
+  const versions = Array.isArray(document.versions) ? document.versions : Object.keys(document.versions ?? {})
+  const isAlpha = (version: string): boolean => /-(alpha|beta)\./.test(version)
+  const usable = (version: string | undefined): version is string => version !== undefined && version !== '' && !isAlpha(version) && versions.includes(version)
+  // Registry key order is publish order, not semver order — sort before
+  // taking a maximum.
+  const bySemver = (a: string, b: string): number => {
+    const parse = (v: string): number[] => (/^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?/.exec(v) ?? []).slice(1).map(part => Number(part ?? 0))
+    const [aMajor, aMinor, aPatch, aRc] = parse(a)
+    const [bMajor, bMinor, bPatch, bRc] = parse(b)
+    return aMajor - bMajor || aMinor - bMinor || aPatch - bPatch || (aRc ?? -1) - (bRc ?? -1)
+  }
+  // Newest first: upstream pairs the bundle with the launcher on the `next`
+  // tag, so taking it already aligns the common case (old-bundle-under-new-dsh
+  // is exactly what `next` heals). The launcher's own line and the highest
+  // non-alpha are fallbacks for when no tag is usable — pinning the line up
+  // front would drag a fresh install back onto an old, broken one.
+  if (usable(tags.next)) return tags.next
+  if (usable(tags.latest)) return tags.latest
+  if (lineHint !== undefined) {
+    const line = /^(\d+\.\d+)\./.exec(lineHint)?.[1]
+    if (line !== undefined) {
+      const onLine = versions.filter(version => version.startsWith(`${line}.`) && !isAlpha(version)).sort(bySemver)
+      if (onLine.length > 0) return onLine.at(-1)
+    }
+  }
+  const sane = versions.filter(version => !isAlpha(version)).sort(bySemver)
+  return sane.at(-1)
+}

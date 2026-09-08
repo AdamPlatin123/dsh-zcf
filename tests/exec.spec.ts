@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, chmod, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { whichOnPath, windowsSpawnArgs } from '../src/exec.ts'
+import { resolveUpstreamVersion, whichOnPath, windowsSpawnArgs } from '../src/exec.ts'
 
 const tempDirs: string[] = []
 
@@ -87,5 +87,40 @@ describe('whichOnPath', () => {
   it('returns undefined for an empty name or empty PATH', () => {
     expect(whichOnPath('', 'whatever', undefined, 'linux')).toBeUndefined()
     expect(whichOnPath('dsh', '', undefined, 'linux')).toBeUndefined()
+  })
+})
+
+describe('resolveUpstreamVersion', () => {
+  /** A registry-metadata fetch scripted with the given tags and versions. */
+  const scriptedFetch = (distTags: Record<string, string>, versions: string[]): (url: string) => Promise<Response> => {
+    return async () => new Response(JSON.stringify({ 'dist-tags': distTags, versions: Object.fromEntries(versions.map(v => [v, {}])) }), { status: 200 })
+  }
+
+  it('prefers the paired next tag over a broken latest', async () => {
+    const version = await resolveUpstreamVersion('@deepseek-ai/dsh-web-app', '0.1.2-rc.1', scriptedFetch({ latest: '0.0.1-rc.1', next: '0.1.2-rc.1' }, ['0.0.1-rc.1', '0.1.0-rc.6', '0.1.0-rc.8', '0.1.2-rc.1']))
+    expect(version).toBe('0.1.2-rc.1')
+  })
+
+  it('falls back to the launcher line when no usable tag exists', async () => {
+    const version = await resolveUpstreamVersion('@deepseek-ai/dsh-web-app', '0.1.0-rc.8', scriptedFetch({}, ['0.0.1-rc.1', '0.1.0-rc.6', '0.1.0-rc.8', '0.1.2-alpha.5', '0.1.5-alpha.1']))
+    expect(version).toBe('0.1.0-rc.8')
+  })
+
+  it('never returns an alpha or beta build', async () => {
+    const version = await resolveUpstreamVersion('pkg', undefined, scriptedFetch({ latest: '0.1.5-alpha.1' }, ['0.1.2-rc.1', '0.1.5-alpha.1']))
+    // latest is an alpha — the highest non-alpha rc wins.
+    expect(version).toBe('0.1.2-rc.1')
+  })
+
+  it('sorts versions semver-style regardless of registry key order', async () => {
+    const version = await resolveUpstreamVersion('pkg', undefined, scriptedFetch({}, ['0.10.0', '0.9.0', '0.2.0']))
+    expect(version).toBe('0.10.0')
+  })
+
+  it('returns undefined on a failed lookup so the caller keeps its static range', async () => {
+    const failing = async (): Promise<Response> => new Response('nope', { status: 404 })
+    expect(await resolveUpstreamVersion('pkg', undefined, failing)).toBeUndefined()
+    const throwing = async (): Promise<Response> => { throw new Error('offline') }
+    expect(await resolveUpstreamVersion('pkg', undefined, throwing)).toBeUndefined()
   })
 })

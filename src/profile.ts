@@ -262,10 +262,13 @@ export async function installModelCatalog(run: RunFn, home: string, profile: str
  * @param run - command runner.
  * @param surface - runtime surface whose bundle the profile mounts.
  * @param profile - profile name.
+ * @param bundleSpec - install spec for the surface bundle; defaults to the
+ *        static {@link SURFACE_BUNDLES} entry (the caller resolves the
+ *        newest upstream version when it can).
  * @returns the verify (`--dump-config`) result.
  */
-export function createProfile(run: RunFn, surface: Surface, profile: string): RunResult {
-  const add = pluginAdd(run, profile, SURFACE_BUNDLES[surface])
+export function createProfile(run: RunFn, surface: Surface, profile: string, bundleSpec: string = SURFACE_BUNDLES[surface]): RunResult {
+  const add = pluginAdd(run, profile, bundleSpec)
   if (add.status !== 0) return add
   return run('dsh', ['--profile', profile, '--dump-config'])
 }

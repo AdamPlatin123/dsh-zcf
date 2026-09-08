@@ -1395,7 +1395,7 @@ describe('runWizard — web launch orchestration', () => {
       ...outputLines(lines),
     }), { ...OPTIONS, action: 'init', mode: 'web' })
     expect(code).toBe(0)
-    expect(detached).toEqual([['dsh', '--profile', 'dzcf', 'web']])
+    expect(detached).toEqual([['dsh', '--profile', 'dzcf']])
     expect(asked.some(question => question.name === 'launchWeb')).toBe(true)
     expect(lines.join('\n')).toContain('正在后台启动')
     expect(lines.join('\n')).toContain('Web 界面已就绪')
@@ -1415,7 +1415,7 @@ describe('runWizard — web launch orchestration', () => {
       ...outputLines(lines),
     }), { ...OPTIONS, action: 'init', mode: 'web' })
     expect(code).toBe(0)
-    expect(lines.join('\n')).toContain('dsh --profile dzcf web')
+    expect(lines.join('\n')).toContain('dsh --profile dzcf')
     expect(lines.join('\n')).toContain('未在等待窗口内就绪')
   })
 
@@ -1431,7 +1431,7 @@ describe('runWizard — web launch orchestration', () => {
     expect(code).toBe(0)
     expect(probes).toBe(0)
     expect(lines.join('\n')).not.toContain('已在运行')
-    expect(lines.join('\n')).toContain('dsh web')
+    expect(lines.join('\n')).toContain('dsh --profile')
   })
 })
 

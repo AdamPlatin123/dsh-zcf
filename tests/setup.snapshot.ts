@@ -30,7 +30,11 @@ async function tempHome(): Promise<string> {
 }
 
 describe('dzcf non-interactive setup snapshot', () => {
-  it('writes the picked model as a single-document patch array the loader can parse', async () => {
+  // The run now resolves the bundle version from the live registry before
+  // composing the profile, so the end-to-end budget must cover that hop.
+  const E2E_TIMEOUT_MS = 30_000
+
+  it('writes the picked model as a single-document patch array the loader can parse', { timeout: E2E_TIMEOUT_MS }, async () => {
     await chmod(join(FIXTURES, 'dsh'), 0o755)
     const home = await tempHome()
     const result = spawnSync(process.execPath, ['--import', 'tsx/esm', BIN, 'i', '--key', 'sk-snapshot-1234567890', '--mode', 'web', '--model', 'deepseek-v4-pro', '--yes'], {
@@ -55,7 +59,7 @@ describe('dzcf non-interactive setup snapshot', () => {
     expect(row).toBeDefined()
   })
 
-  it('installs nothing, stores the key, verifies through the shim, and prints next steps', async () => {
+  it('installs nothing, stores the key, verifies through the shim, and prints next steps', { timeout: E2E_TIMEOUT_MS }, async () => {
     await chmod(join(FIXTURES, 'dsh'), 0o755)
     const home = await tempHome()
     const result = spawnSync(process.execPath, ['--import', 'tsx/esm', BIN, 'i', '--key', 'sk-snapshot-1234567890', '--mode', 'web', '--yes'], {
