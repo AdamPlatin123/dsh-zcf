@@ -20,7 +20,7 @@ import { API_KEY_REF, BASE_URL_REF, MESSAGES, PUBLIC_BASE_URL, translate, type L
 import type { PromptFn, PromptOutcome, PromptQuestion } from './ui.ts'
 import type { RunFn, RunResult } from './exec.ts'
 import { detectPackageManager, dshAvailable, installDshArgs, REGISTRY_OPTIONS, resolveUpstreamVersion } from './exec.ts'
-import { ensureHomeDirectory, maskKey, migrateCredentialsIfNeeded, needsV1Migration, readCredentials, writeCredentials } from './credentials.ts'
+import { backupCorruptCredentials, ensureHomeDirectory, maskKey, migrateCredentialsIfNeeded, needsV1Migration, readCredentials, writeCredentials } from './credentials.ts'
 import { writeEnvFile } from './dotenv.ts'
 import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, readDefaultProfile, readProfileRegistry, removePlugin, setPnpmBinOverride, writeDefaultProfile, writeProfileNpmrc } from './profile.ts'
 import { detectDesktopPlatform, desktopDownloadDir, downloadDesktopInstaller, resolveDesktopAsset, type FetchLike } from './desktop.ts'
@@ -1049,6 +1049,46 @@ async function installPlugins(context: WizardContext, t: T, profile: string, plu
 
 /** Fully-collected init state after the step loop resolves. */
 /**
+ * Read the stored credentials, or when the document is unparseable, offer the
+ * repair path: the broken file is moved aside (timestamped backup, nothing
+ * destroyed) and the run continues with a fresh document. Non-interactive
+ * runs without --yes keep the loud failure — rewriting a file a batch run
+ * cannot even read must stay an explicit choice.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param options - resolved command-line options.
+ * @returns the stored mapping, an empty one after a repair, or undefined
+ *          when the failure stands (caller reports and aborts).
+ */
+async function readStoredOrRecover(context: WizardContext, t: T, options: DzcfOptions): Promise<Record<string, string> | undefined> {
+  const { home, out, err } = context
+  const path = `${dshHomeDisplay(home)}/.credentials.yaml`
+  try {
+    return readCredentials(home)
+  } catch (error) {
+    const reason = (error as Error).message
+    if (!context.interactive && !options.yes) {
+      err(t('credentialsReadFailed', { path, reason: `${reason}${t('credentialsCorruptHint')}` }))
+      return undefined
+    }
+    if (context.interactive && !options.yes) {
+      const outcome = await askOne(context.prompt, { type: 'confirm', name: 'repairCredentials', message: t('credentialsCorruptAsk', { reason }), default: false })
+      if (outcome.status === 'cancelled' || outcome.value.repairCredentials !== true) {
+        err(t('credentialsReadFailed', { path, reason }))
+        return undefined
+      }
+    }
+    const backup = backupCorruptCredentials(home)
+    if (backup === undefined) {
+      err(t('credentialsReadFailed', { path, reason }))
+      return undefined
+    }
+    out(t('credentialsCorruptBackedUp', { path: backup }))
+    return {}
+  }
+}
+
+/**
  * Ask which upstream model to pin into the profile catalog. The listing is
  * fetched live from the endpoint with the key; a failed fetch falls back to a
  * manual id entry, and an empty answer leaves the catalog untouched.
@@ -1096,13 +1136,8 @@ interface InitState {
  * cancels the run. Non-interactive runs keep the fallback/fail-loud path.
  */
 async function collectInitState(context: WizardContext, t: T, options: DzcfOptions): Promise<{ status: 'done'; state: InitState } | { status: 'cancelled' } | { status: 'abort' }> {
-  let stored: Record<string, string>
-  try {
-    stored = readCredentials(context.home)
-  } catch (error) {
-    context.err(t('credentialsReadFailed', { path: `${dshHomeDisplay(context.home)}/.credentials.yaml`, reason: (error as Error).message }))
-    return { status: 'abort' }
-  }
+  const stored = await readStoredOrRecover(context, t, options)
+  if (stored === undefined) return { status: 'abort' }
   if (!context.interactive) {
     // A key already on disk satisfies the run: explicit --key wins, the
     // stored document is the fallback, and only a machine with neither aborts.
@@ -1680,13 +1715,8 @@ async function runConfigure(context: WizardContext, t: T, options: DzcfOptions):
 /** The credentials-only flow, as a navigable key -> base URL -> confirm loop. */
 async function runCredentials(context: WizardContext, t: T, options: DzcfOptions): Promise<number> {
   const { home, out, err, run } = context
-  let stored: Record<string, string> = {}
-  try {
-    stored = readCredentials(home)
-  } catch (error) {
-    err(t('credentialsReadFailed', { path: `${dshHomeDisplay(home)}/.credentials.yaml`, reason: (error as Error).message }))
-    return 1
-  }
+  const stored = await readStoredOrRecover(context, t, options)
+  if (stored === undefined) return 1
   let key = options.key ?? stored[API_KEY_REF]
   let baseUrl = options.baseUrl ?? stored[BASE_URL_REF] ?? ''
   let model: string | undefined = options.model

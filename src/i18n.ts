@@ -311,6 +311,18 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '读取凭据文件失败：{path}（{reason}）。修好或删除该文件后重试。',
     'en': 'Reading the credentials file failed: {path} ({reason}). Fix or remove it and retry.',
   },
+  credentialsCorruptHint: {
+    'zh-CN': '（非交互模式拒绝自动重写；加 --yes 可在备份损坏文件后以全新文档继续）',
+    'en': ' (non-interactive runs refuse to rewrite automatically; add --yes to back the broken file up and continue with a fresh document)',
+  },
+  credentialsCorruptAsk: {
+    'zh-CN': '凭据文档无法解析：{reason}。要备份损坏文件后以全新文档继续吗？（原内容会保留为带时间戳的 .corrupt- 备份，不会销毁）',
+    'en': 'The credentials document cannot be parsed: {reason}. Back the broken file up and continue with a fresh document? (the original stays as a timestamped .corrupt- backup — nothing is destroyed)',
+  },
+  credentialsCorruptBackedUp: {
+    'zh-CN': '已把损坏的凭据文档备份为 {path}，本次以全新文档继续。',
+    'en': 'The broken credentials document was backed up as {path}; continuing with a fresh document.',
+  },
   summary: {
     'zh-CN': '即将执行：\n{lines}',
     'en': 'About to run:\n{lines}',

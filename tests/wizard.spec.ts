@@ -480,11 +480,70 @@ describe('runWizard — interactive', () => {
 })
 
 describe('runWizard — credentials flow', () => {
+  /** Write an unparseable credentials document into a temp home. */
+  const corruptHome = async (): Promise<string> => {
+    const home = await tempHome()
+    await ensureHomeDirectory(home)
+    await writeFile(credentialsPath(home), 'version: 1\nrefs:\n  DEEPSEEK_API_KEY: "{broken\n')
+    return home
+  }
+
   it('stores the key without a surface or integrations', async () => {
     const home = await tempHome()
     const code = await runWizard(await context({ home }), { ...OPTIONS, action: 'credentials', key: 'sk-cred-1' })
     expect(code).toBe(0)
     expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-cred-1' })
+  })
+
+  it('repairs an unparseable document after an interactive confirm: backup, fresh write', async () => {
+    const home = await corruptHome()
+    const { prompt } = scriptedPrompt({ repairCredentials: true, kmenu: 'key', keyChoice: '__NEW__', key: 'sk-repaired-1', proceed: true })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, prompt, interactive: true, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'credentials',
+    })
+    expect(code).toBe(0)
+    expect(lines.join('\n')).toContain('.corrupt-')
+    expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-repaired-1' })
+    const leftover = (await readdir(home)).filter(name => name.includes('corrupt'))
+    expect(leftover).toHaveLength(1)
+    expect((await readFile(join(home, leftover[0] as string), 'utf8'))).toContain('{broken')
+  })
+
+  it('auto-repairs with a backup under --yes in non-interactive runs', async () => {
+    const home = await corruptHome()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'credentials', key: 'sk-repaired-2', yes: true,
+    })
+    expect(code).toBe(0)
+    expect(readCredentials(home)).toEqual({ DEEPSEEK_API_KEY: 'sk-repaired-2' })
+    expect(lines.join('\n')).toContain('.corrupt-')
+  })
+
+  it('keeps the loud failure without --yes in non-interactive runs and points at it', async () => {
+    const home = await corruptHome()
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'credentials', key: 'sk-rejected-3',
+    })
+    expect(code).toBe(1)
+    expect(lines.join('\n')).toContain('--yes')
+    // Nothing moved, nothing written.
+    expect((await readFile(credentialsPath(home), 'utf8'))).toContain('{broken')
+    expect((await readdir(home)).filter(name => name.includes('corrupt'))).toHaveLength(0)
+  })
+
+  it('leaves the broken document untouched when the interactive repair is declined', async () => {
+    const home = await corruptHome()
+    const { prompt } = scriptedPrompt({ repairCredentials: false })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, prompt, interactive: true, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'credentials',
+    })
+    expect(code).toBe(1)
+    expect((await readFile(credentialsPath(home), 'utf8'))).toContain('{broken')
+    expect((await readdir(home)).filter(name => name.includes('corrupt'))).toHaveLength(0)
   })
 
   it('offers stored key credentials (never the base URL) in the interactive key update and uses the picked one', async () => {

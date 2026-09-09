@@ -9,7 +9,7 @@
  * @module dsh-zcf
  */
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, renameSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import yaml from 'js-yaml'
@@ -188,4 +188,26 @@ export async function ensureHomeDirectory(home: string): Promise<void> {
 export function maskKey(key: string): string {
   if (key.length <= 8) return `${key.slice(0, 2)}***`
   return `${key.slice(0, 3)}***${key.slice(-4)}`
+}
+
+/**
+ * Move an unparseable credentials document aside, timestamped, so the wizard
+ * can start a fresh one without destroying anything — the broken bytes stay
+ * on disk for manual inspection or recovery.
+ * @param home - resolved harness home.
+ * @returns the backup path, or undefined when the file could not be moved
+ *          (absent, or already renamed by an earlier attempt).
+ */
+export function backupCorruptCredentials(home: string): string | undefined {
+  const path = credentialsPath(home)
+  const now = new Date()
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  const backup = `${path}.corrupt-${stamp}`
+  try {
+    renameSync(path, backup)
+  } catch {
+    return undefined
+  }
+  return backup
 }
