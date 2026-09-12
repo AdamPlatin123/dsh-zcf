@@ -19,7 +19,7 @@ import { isHttpUrl, type DzcfAction, type DzcfOptions } from './args.ts'
 import { API_KEY_REF, BASE_URL_REF, MESSAGES, PUBLIC_BASE_URL, translate, type Lang } from './i18n.ts'
 import type { PromptFn, PromptOutcome, PromptQuestion } from './ui.ts'
 import type { RunFn, RunResult } from './exec.ts'
-import { detectPackageManager, dshAvailable, installDshArgs, REGISTRY_OPTIONS, resolveUpstreamVersion } from './exec.ts'
+import { detectPackageManager, dshAvailable, installDshArgs, isTermux, REGISTRY_OPTIONS, resolveUpstreamVersion, TERMUX_TOOLCHAIN } from './exec.ts'
 import { backupCorruptCredentials, ensureHomeDirectory, maskKey, migrateCredentialsIfNeeded, needsV1Migration, readCredentials, writeCredentials } from './credentials.ts'
 import { writeEnvFile } from './dotenv.ts'
 import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, readDefaultProfile, readProfileRegistry, removePlugin, setPnpmBinOverride, writeDefaultProfile, writeProfileNpmrc } from './profile.ts'
@@ -330,6 +330,41 @@ function ensurePnpm(context: WizardContext, t: T, options: DzcfOptions): boolean
   return true
 }
 
+/**
+ * Under Termux, dsh's native `node-pty` dependency needs a compile toolchain
+ * that the environment does not ship: without it npm runs for minutes and
+ * dies inside node-gyp's Python probe. The preflight checks the tools up
+ * front and offers the one-line `pkg install` — much better than the crash.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param options - resolved command-line options.
+ * @returns true when the toolchain is present (or was just installed).
+ */
+async function ensureTermuxToolchain(context: WizardContext, t: T, options: DzcfOptions): Promise<boolean> {
+  const { run, out, err, which } = context
+  if (!isTermux() || TERMUX_TOOLCHAIN.every(tool => which(tool) !== undefined)) return true
+  const command = `pkg install -y ${TERMUX_TOOLCHAIN.join(' ')} binutils`
+  if (!context.interactive && !options.yes) {
+    err(t('termuxToolchainLoud', { command }))
+    return false
+  }
+  if (context.interactive && !options.yes) {
+    const outcome = await askOne(context.prompt, { type: 'confirm', name: 'termuxToolchain', message: t('termuxToolchainAsk', { tools: TERMUX_TOOLCHAIN.join(' ') }), default: true })
+    if (outcome.status === 'cancelled' || outcome.value.termuxToolchain !== true) {
+      err(t('termuxToolchainLoud', { command }))
+      return false
+    }
+  }
+  out(t('termuxToolchainInstalling', { command }))
+  const install = run('pkg', ['install', '-y', ...TERMUX_TOOLCHAIN, 'binutils'])
+  if (install.status !== 0) {
+    err(t('termuxToolchainLoud', { command }))
+    return false
+  }
+  out(t('termuxToolchainReady'))
+  return true
+}
+
 /** Ensure `dsh` answers on the PATH, offering an install otherwise. */
 async function ensureDsh(context: WizardContext, t: T, options: DzcfOptions): Promise<boolean> {
   const { run, interactive, prompt, out, err } = context
@@ -344,6 +379,10 @@ async function ensureDsh(context: WizardContext, t: T, options: DzcfOptions): Pr
     err(t('noPackageManager'))
     return false
   }
+  // The Termux toolchain check comes before the generic non-interactive gate:
+  // a Termux user without --yes still deserves the one-line pkg fix instead
+  // of the generic "install dsh first" hint.
+  if (!await ensureTermuxToolchain(context, t, options)) return false
   if (!interactive && !options.yes) {
     err(t('dshMissingNoTty'))
     return false
@@ -372,6 +411,13 @@ async function ensureDsh(context: WizardContext, t: T, options: DzcfOptions): Pr
   out(t('installElapsed', { seconds: String(Math.round((Date.now() - started) / 1000)) }))
   if (install.status !== 0) {
     err(t('installFailed', { stderr: install.stderr.trim() }))
+    // node-gyp's Python probe is the loudest symptom of a missing Termux
+    // toolchain — a targeted hint beats a wall of gyp stack for it.
+    if (/android_ndk_path/.test(install.stderr)) {
+      err(t('termuxNdkHint', { prefix: process.env.PREFIX ?? '/data/data/com.termux/files/usr' }))
+    } else if (/[Ff]ind Python|node-gyp/.test(install.stderr)) {
+      err(t('termuxGypHint'))
+    }
     return false
   }
   if (!dshAvailable(run)) {

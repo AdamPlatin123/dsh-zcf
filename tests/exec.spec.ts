@@ -2,7 +2,16 @@ import { mkdtemp, mkdir, writeFile, chmod, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { resolveUpstreamVersion, whichOnPath, windowsSpawnArgs } from '../src/exec.ts'
+import { isTermux, resolveUpstreamVersion, whichOnPath, windowsSpawnArgs } from '../src/exec.ts'
+
+describe('isTermux', () => {
+  it('detects Termux through its own markers', () => {
+    expect(isTermux({ TERMUX_VERSION: '0.118' } as NodeJS.ProcessEnv)).toBe(true)
+    expect(isTermux({ PREFIX: '/data/data/com.termux/files/usr' } as NodeJS.ProcessEnv)).toBe(true)
+    expect(isTermux({} as NodeJS.ProcessEnv)).toBe(false)
+    expect(isTermux({ PREFIX: '/usr' } as NodeJS.ProcessEnv)).toBe(false)
+  })
+})
 
 const tempDirs: string[] = []
 

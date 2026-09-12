@@ -289,6 +289,59 @@ describe('runWizard — non-interactive init', () => {
     expect(lines.join('\n')).toMatch(/安装耗时 \d+ 秒/)
   })
 
+  it('installs the Termux toolchain before dsh when it is missing under --yes', async () => {
+    const home = await tempHome()
+    process.env.TERMUX_VERSION = '0.118'
+    try {
+      let toolchainReady = false
+      let dshInstalled = false
+      const pkgCalls: Array<readonly string[]> = []
+      const run: RunFn = (command, args) => {
+        if (command === 'pkg') {
+          pkgCalls.push(args)
+          toolchainReady = true
+          return { status: 0, stdout: '', stderr: '' }
+        }
+        if (command === 'dsh' && args[0] === '-V') return { status: dshInstalled ? 0 : null, stdout: '', stderr: 'not found' }
+        if (command === 'dsh') return { status: 0, stdout: '# composed\n', stderr: '' }
+        if ((command === 'pnpm' || command.endsWith('/pnpm')) && args[0] === '-v') return { status: 0, stdout: '10.18.0\n', stderr: '' }
+        return { status: null, stdout: '', stderr: `command not found: ${command}` }
+      }
+      const installing = async (pm: string, args: readonly string[], onLine: (line: string) => void) => {
+        dshInstalled = true
+        expect(toolchainReady).toBe(true)
+        return scriptedInstall().installDsh(pm, args, onLine)
+      }
+      const lines: string[] = []
+      const code = await runWizard(await context({ home, run, installDsh: installing, which: name => (name === 'python' || name === 'make' || name === 'clang') && toolchainReady ? `usr/bin/${name}` : undefined, ...outputLines(lines) }), { ...OPTIONS, key: 'sk-termux-1', mode: 'web', yes: true })
+      expect(code).toBe(0)
+      expect(pkgCalls).toEqual([['install', '-y', 'python', 'make', 'clang', 'binutils']])
+      expect(lines.join('\n')).toContain('工具链')
+      expect(lines.join('\n')).toContain('Packages: +1')
+    } finally {
+      delete process.env.TERMUX_VERSION
+    }
+  })
+
+  it('fails loud with the pkg command when Termux lacks the toolchain without --yes', async () => {
+    const home = await tempHome()
+    process.env.TERMUX_VERSION = '0.118'
+    const run: RunFn = (command, args) => {
+      if (command === 'dsh' && args[0] === '-V') return { status: null, stdout: '', stderr: 'not found' }
+      if (command === 'pnpm' || command.endsWith('/pnpm')) return { status: 0, stdout: '10.18.0\n', stderr: '' }
+      return { status: null, stdout: '', stderr: `command not found: ${command}` }
+    }
+    try {
+      const lines: string[] = []
+      const code = await runWizard(await context({ home, run, which: () => undefined, ...outputLines(lines) }), { ...OPTIONS, key: 'sk-termux-2', mode: 'web' })
+      expect(code).toBe(1)
+      expect(lines.join('\n')).toContain('pkg install -y python make clang binutils')
+      expect(lines.join('\n')).not.toContain('Packages: +1')
+    } finally {
+      delete process.env.TERMUX_VERSION
+    }
+  })
+
   it('fails without installing when dsh is missing and --yes is absent', async () => {
     const home = await tempHome()
     const run: RunFn = () => ({ status: null, stdout: '', stderr: 'not found' })
@@ -753,6 +806,20 @@ describe('runWizard — registry pick and install streaming', () => {
     expect(asked.some(question => question.name === 'registry')).toBe(false)
     expect(calls[0]?.args.some(arg => arg.startsWith('--registry='))).toBe(false)
     expect(lines.join('\n')).toContain('所有安装源都未在 3 秒内应答')
+  })
+
+  it('hints the android_ndk_path fix when node-pty hits the Termux gyp gap', async () => {
+    const home = await tempHome()
+    const run: RunFn = (command, args) => {
+      if (command === 'dsh' && args[0] === '-V') return { status: null, stdout: '', stderr: 'not found' }
+      if (command === 'pnpm' || command.endsWith('/pnpm')) return { status: 0, stdout: '10.18.0\n', stderr: '' }
+      return { status: null, stdout: '', stderr: `command not found: ${command}` }
+    }
+    const failing = async (): Promise<RunResult> => ({ status: 1, stdout: '', stderr: 'npm error gyp: Undefined variable android_ndk_path in binding.gyp' })
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, installDsh: failing, ...outputLines(lines) }), { ...OPTIONS, key: 'sk-ndk-1', mode: 'web', yes: true })
+    expect(code).toBe(1)
+    expect(lines.join('\n')).toContain('npm config set android_ndk_path')
   })
 
   it('fails loud when the streaming installer fails', async () => {

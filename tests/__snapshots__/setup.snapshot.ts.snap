@@ -23,11 +23,11 @@ refs:
 [38;2;77;107;254m[1m║   Zero-Config Code Flow for DeepSeek Harness                           ║[22m[39m
 [38;2;77;107;254m[1m║                                                                        ║[22m[39m
 [38;2;77;107;254m[1m╚════════════════════════════════════════════════════════════════════════╝[22m[39m
-dsh-zcf v0.5.9（新版见 https://www.npmjs.com/package/dsh-zcf）
+dsh-zcf v0.5.10（新版见 https://www.npmjs.com/package/dsh-zcf）
 
 ✓ 已找到 dsh 命令
 ✓ 凭据已写入 $DSH_HOME/.credentials.yaml（0600）：DEEPSEEK_API_KEY
-已解析 @deepseek-ai/dsh-web-app 的最新可用版本：0.1.2-rc.1（与已安装的 dsh 版本线对齐；解析失败时会回退到内置版本区间）
+已解析 @deepseek-ai/dsh-web-app 的最新可用版本：0.1.5-rc.2（与已安装的 dsh 版本线对齐；解析失败时会回退到内置版本区间）
 ✓ 已创建 profile：dzcf
 ✓ dzcf profile 组装成功
 

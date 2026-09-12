@@ -31,8 +31,9 @@ async function tempHome(): Promise<string> {
 
 describe('dzcf non-interactive setup snapshot', () => {
   // The run now resolves the bundle version from the live registry before
-  // composing the profile, so the end-to-end budget must cover that hop.
-  const E2E_TIMEOUT_MS = 30_000
+  // composing the profile, so the end-to-end budget must cover that hop with
+  // headroom for slow networks.
+  const E2E_TIMEOUT_MS = 60_000
 
   it('writes the picked model as a single-document patch array the loader can parse', { timeout: E2E_TIMEOUT_MS }, async () => {
     await chmod(join(FIXTURES, 'dsh'), 0o755)

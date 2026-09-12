@@ -184,6 +184,21 @@ export function dshAvailable(run: RunFn): boolean {
 const PACKAGE_MANAGERS = ['pnpm', 'npm'] as const
 
 /**
+ * Whether the wizard runs under Termux (Android). Node reports a plain
+ * Linux-looking platform there, so the detection goes through Termux's own
+ * markers instead. Matters because dsh's `node-pty` dependency is a native
+ * module: npm compiles it on install, and Termux ships none of the toolchain.
+ * @param env - environment (injectable for tests).
+ * @returns true under Termux.
+ */
+export function isTermux(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.TERMUX_VERSION !== undefined || (env.PREFIX ?? '').startsWith('/data/data/com.termux')
+}
+
+/** The native-build tools node-gyp needs inside Termux. */
+export const TERMUX_TOOLCHAIN: readonly string[] = ['python', 'make', 'clang']
+
+/**
  * The first available package manager, or undefined when none answers.
  * @param run - command runner.
  * @returns the executable name of the detected package manager.

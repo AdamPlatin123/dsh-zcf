@@ -47,6 +47,30 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '未找到 dsh 命令。请先安装（如 `npm install -g @deepseek-ai/dsh`），或加 `--yes` 让 dsh-zcf 代为安装。',
     'en': 'dsh command not found. Install it first (e.g. `npm install -g @deepseek-ai/dsh`), or pass `--yes` to let dsh-zcf install it.',
   },
+  termuxToolchainLoud: {
+    'zh-CN': 'Termux 环境缺少原生编译工具链（dsh 的 node-pty 依赖需要现场编译，否则安装会在 node-gyp 处失败）。请先运行：{command}',
+    'en': 'Termux is missing the native compile toolchain (dsh\'s node-pty dependency compiles on install and dies in node-gyp without it). Run first: {command}',
+  },
+  termuxToolchainAsk: {
+    'zh-CN': '检测到 Termux 缺少编译工具链（{tools}——node-pty 原生编译需要）。现在用 pkg 安装吗？',
+    'en': 'Termux lacks the compile toolchain ({tools} — required by node-pty\'s native build). Install it with pkg now?',
+  },
+  termuxToolchainInstalling: {
+    'zh-CN': '正在安装工具链：{command}……',
+    'en': 'Installing the toolchain: {command}…',
+  },
+  termuxToolchainReady: {
+    'zh-CN': '✓ 工具链已就绪。',
+    'en': '✓ Toolchain ready.',
+  },
+  termuxGypHint: {
+    'zh-CN': '提示：这是 node-pty 原生编译失败——Termux 下先 `pkg install python make clang binutils` 再重试；其它平台请安装 Python 3 与构建工具。',
+    'en': 'Hint: this is node-pty failing its native build — under Termux run `pkg install python make clang binutils` first, then retry; elsewhere install Python 3 and build tools.',
+  },
+  termuxNdkHint: {
+    'zh-CN': '提示：node-pty 的 Android 编译配置引用了未定义的 android_ndk_path。Termux 的已知解法：`npm config set android_ndk_path {prefix}`，然后重跑本向导。（若此后仍报编译错误，这是 node-pty 对 Termux 的兼容缺口，建议向 dsh/node-pty 上游反馈将其 optional 化。）',
+    'en': 'Hint: node-pty\'s Android build config references an undefined android_ndk_path. The known Termux fix: `npm config set android_ndk_path {prefix}`, then rerun this wizard. (If the build still fails after that, it is a node-pty/Termux compatibility gap worth reporting upstream so it becomes optional.)',
+  },
   installConfirm: {
     'zh-CN': '现在用 {pm} 全局安装 @deepseek-ai/dsh 吗？',
     'en': 'Install @deepseek-ai/dsh globally with {pm} now?',
