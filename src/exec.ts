@@ -7,7 +7,8 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process'
-import { accessSync, constants as fsConstants } from 'node:fs'
+import { accessSync, constants as fsConstants, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
 /** Result of one synchronous command run. */
@@ -197,6 +198,47 @@ export function isTermux(env: NodeJS.ProcessEnv = process.env): boolean {
 
 /** The native-build tools node-gyp needs inside Termux. */
 export const TERMUX_TOOLCHAIN: readonly string[] = ['python', 'make', 'clang']
+
+/** The gyp line in the cached Node headers that trips Android addon builds. */
+const ANDROID_GYPI_NEEDLE = "'cflags': [ '-fPIC', '-I<(android_ndk_path)/sources/android/cpufeatures' ]"
+
+/**
+ * Patch the cached Node headers' `common.gypi` so Android addon builds stop
+ * failing on an undefined `android_ndk_path`. The variable lives in the
+ * headers node-gyp downloads (`~/.cache/node-gyp/<ver>/include/node/
+ * common.gypi`, `OS == "android"` branch) and is only ever defined when Node
+ * itself is built with the NDK — never for addons, so every native addon on
+ * Termux dies on it (a long-standing gyp-next issue closed without a fix).
+ * The patch adds the missing default; it is idempotent and shape-checked:
+ * files without the reference, already carrying the default, or not matching
+ * the known line stay untouched.
+ * @param cacheRoot - the node-gyp cache root (injectable for tests).
+ * @returns the patched file paths (empty when there was nothing to do).
+ */
+export function patchNodeGypAndroidDefault(cacheRoot: string = join(homedir(), '.cache', 'node-gyp')): readonly string[] {
+  const patched: string[] = []
+  let versions: string[]
+  try {
+    versions = readdirSync(cacheRoot)
+  } catch {
+    return patched
+  }
+  for (const version of versions) {
+    const gypi = join(cacheRoot, version, 'include', 'node', 'common.gypi')
+    let text: string
+    try {
+      text = readFileSync(gypi, 'utf8')
+    } catch {
+      continue
+    }
+    if (!text.includes('<(android_ndk_path)')) continue
+    if (text.includes('android_ndk_path%')) continue
+    if (!text.includes(ANDROID_GYPI_NEEDLE)) continue
+    writeFileSync(gypi, text.replace(ANDROID_GYPI_NEEDLE, `'variables': { 'android_ndk_path%': '' },\n      ${ANDROID_GYPI_NEEDLE}`))
+    patched.push(gypi)
+  }
+  return patched
+}
 
 /**
  * The first available package manager, or undefined when none answers.

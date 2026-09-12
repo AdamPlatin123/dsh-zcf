@@ -79,7 +79,9 @@ describe('dzcf non-interactive setup snapshot', () => {
 
     expect({
       status: result.status,
-      stdout: result.stdout,
+      // The resolver line carries whatever the registry serves today; the
+      // snapshot pins the behavior, not the upstream release calendar.
+      stdout: result.stdout.replace(/最新可用版本：\S+（/, '最新可用版本：<resolved>（'),
       stderr: result.stderr,
       document,
       fileMode,

@@ -67,9 +67,13 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '提示：这是 node-pty 原生编译失败——Termux 下先 `pkg install python make clang binutils` 再重试；其它平台请安装 Python 3 与构建工具。',
     'en': 'Hint: this is node-pty failing its native build — under Termux run `pkg install python make clang binutils` first, then retry; elsewhere install Python 3 and build tools.',
   },
+  termuxGypPatched: {
+    'zh-CN': '已修补 Node 头文件缓存中的 Android 编译缺口（android_ndk_path 无默认值）：{path}',
+    'en': 'Patched the cached Node headers\' Android build gap (android_ndk_path has no default): {path}',
+  },
   termuxNdkHint: {
-    'zh-CN': '提示：node-pty 的 Android 编译配置引用了未定义的 android_ndk_path。Termux 的已知解法：`npm config set android_ndk_path {prefix}`，然后重跑本向导。（若此后仍报编译错误，这是 node-pty 对 Termux 的兼容缺口，建议向 dsh/node-pty 上游反馈将其 optional 化。）',
-    'en': 'Hint: node-pty\'s Android build config references an undefined android_ndk_path. The known Termux fix: `npm config set android_ndk_path {prefix}`, then rerun this wizard. (If the build still fails after that, it is a node-pty/Termux compatibility gap worth reporting upstream so it becomes optional.)',
+    'zh-CN': '提示：android_ndk_path 未定义的问题出在 Node 头文件缓存的 common.gypi（并非插件本身），且自动修补未能完成或未生效。可手动在 ~/.cache/node-gyp/<版本>/include/node/common.gypi 的 OS=="android" 分支加入 \'variables\': { \'android_ndk_path%\': \'\' }。该缺口见上游追踪：https://github.com/termux/termux-packages/issues/30975 与 https://github.com/nodejs/gyp-next/issues/237。',
+    'en': 'Hint: the undefined android_ndk_path comes from the cached Node headers\' common.gypi (not from the addon), and the automatic patch did not apply or help. Manually add \'variables\': { \'android_ndk_path%\': \'\' } to the OS=="android" branch of ~/.cache/node-gyp/<ver>/include/node/common.gypi. Upstream tracking: https://github.com/termux/termux-packages/issues/30975 and https://github.com/nodejs/gyp-next/issues/237.',
   },
   installConfirm: {
     'zh-CN': '现在用 {pm} 全局安装 @deepseek-ai/dsh 吗？',

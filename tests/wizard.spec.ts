@@ -819,7 +819,11 @@ describe('runWizard — registry pick and install streaming', () => {
     const lines: string[] = []
     const code = await runWizard(await context({ home, run, installDsh: failing, ...outputLines(lines) }), { ...OPTIONS, key: 'sk-ndk-1', mode: 'web', yes: true })
     expect(code).toBe(1)
-    expect(lines.join('\n')).toContain('npm config set android_ndk_path')
+    // The hint names the real culprit (the cached Node headers, not the
+    // addon) and the manual common.gypi edit, never the npm-config dead end.
+    expect(lines.join('\n')).toContain('common.gypi')
+    expect(lines.join('\n')).toContain('termux-packages/issues/30975')
+    expect(lines.join('\n')).not.toContain('npm config set')
   })
 
   it('fails loud when the streaming installer fails', async () => {

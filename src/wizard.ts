@@ -19,7 +19,7 @@ import { isHttpUrl, type DzcfAction, type DzcfOptions } from './args.ts'
 import { API_KEY_REF, BASE_URL_REF, MESSAGES, PUBLIC_BASE_URL, translate, type Lang } from './i18n.ts'
 import type { PromptFn, PromptOutcome, PromptQuestion } from './ui.ts'
 import type { RunFn, RunResult } from './exec.ts'
-import { detectPackageManager, dshAvailable, installDshArgs, isTermux, REGISTRY_OPTIONS, resolveUpstreamVersion, TERMUX_TOOLCHAIN } from './exec.ts'
+import { detectPackageManager, dshAvailable, installDshArgs, isTermux, patchNodeGypAndroidDefault, REGISTRY_OPTIONS, resolveUpstreamVersion, TERMUX_TOOLCHAIN } from './exec.ts'
 import { backupCorruptCredentials, ensureHomeDirectory, maskKey, migrateCredentialsIfNeeded, needsV1Migration, readCredentials, writeCredentials } from './credentials.ts'
 import { writeEnvFile } from './dotenv.ts'
 import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, readDefaultProfile, readProfileRegistry, removePlugin, setPnpmBinOverride, writeDefaultProfile, writeProfileNpmrc } from './profile.ts'
@@ -342,7 +342,11 @@ function ensurePnpm(context: WizardContext, t: T, options: DzcfOptions): boolean
  */
 async function ensureTermuxToolchain(context: WizardContext, t: T, options: DzcfOptions): Promise<boolean> {
   const { run, out, err, which } = context
-  if (!isTermux() || TERMUX_TOOLCHAIN.every(tool => which(tool) !== undefined)) return true
+  if (!isTermux()) return true
+  // Before anything compiles: patch the cached Node headers' Android default
+  // gap (every native addon dies on the undefined android_ndk_path otherwise).
+  for (const gypi of patchNodeGypAndroidDefault()) context.out(t('termuxGypPatched', { path: gypi }))
+  if (TERMUX_TOOLCHAIN.every(tool => which(tool) !== undefined)) return true
   const command = `pkg install -y ${TERMUX_TOOLCHAIN.join(' ')} binutils`
   if (!context.interactive && !options.yes) {
     err(t('termuxToolchainLoud', { command }))
@@ -407,14 +411,24 @@ async function ensureDsh(context: WizardContext, t: T, options: DzcfOptions): Pr
   const args = installDshArgs(pm, registry)
   out(t('installing', { command: `${pm} ${args.join(' ')}` }))
   const started = Date.now()
-  const install = await context.installDsh(pm, args, (line) => { if (line !== '') out(line) })
+  let install = await context.installDsh(pm, args, (line) => { if (line !== '') out(line) })
   out(t('installElapsed', { seconds: String(Math.round((Date.now() - started) / 1000)) }))
+  if (install.status !== 0 && isTermux() && /android_ndk_path/.test(install.stderr)) {
+    // The headers may have been re-downloaded (fresh cache) after the
+    // preflight patch; heal again and retry once before giving up.
+    const patched = patchNodeGypAndroidDefault()
+    if (patched.length > 0) {
+      for (const gypi of patched) out(t('termuxGypPatched', { path: gypi }))
+      out(t('installing', { command: `${pm} ${args.join(' ')}` }))
+      install = await context.installDsh(pm, args, (line) => { if (line !== '') out(line) })
+    }
+  }
   if (install.status !== 0) {
     err(t('installFailed', { stderr: install.stderr.trim() }))
     // node-gyp's Python probe is the loudest symptom of a missing Termux
     // toolchain — a targeted hint beats a wall of gyp stack for it.
     if (/android_ndk_path/.test(install.stderr)) {
-      err(t('termuxNdkHint', { prefix: process.env.PREFIX ?? '/data/data/com.termux/files/usr' }))
+      err(t('termuxNdkHint'))
     } else if (/[Ff]ind Python|node-gyp/.test(install.stderr)) {
       err(t('termuxGypHint'))
     }
