@@ -1318,6 +1318,43 @@ describe('runWizard — marketplace and manage', () => {
     expect(lines.join('\n')).toContain('切换为官方源')
   })
 
+  it('pins plugins to the official registry versions before installing', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } } }))
+    // The official metadata says 0.9.11; the mirror would serve 0.9.9.
+    const registryFetch = (async (url: string) => {
+      if (String(url).includes('dsh-doublecheck')) {
+        return new Response(JSON.stringify({ 'dist-tags': { latest: '0.9.11' }, versions: { '0.9.9': {}, '0.9.11': {} } }), { status: 200 })
+      }
+      // Unreachable for the other plugin — the bare name stays as fallback.
+      throw new Error('offline')
+    }) as typeof fetch
+    const added: string[] = []
+    const run: RunFn = (command, args) => {
+      if (command === 'dsh' && args[0] === 'plugin' && args.includes('add')) {
+        added.push(...args.filter(arg => !['plugin', '--profile', 'dzcf', 'add', '-w'].includes(arg)))
+        return { status: 0, stdout: '', stderr: '' }
+      }
+      if (command === 'dsh' && args[0] === '-V') return { status: 0, stdout: '0.0.1-rc.4\n', stderr: '' }
+      if (command === 'dsh') return { status: 0, stdout: '', stderr: '' }
+      if (command === 'pnpm' || command.endsWith('/pnpm')) return { status: 0, stdout: '10.18.0\n', stderr: '' }
+      return { status: null, stdout: '', stderr: `command not found: ${command}` }
+    }
+    const batchInstall = async (pm: string, args: readonly string[], onLine: (line: string) => void): Promise<RunResult> => {
+      added.push(...args.filter(arg => arg.includes('@') || arg.startsWith('dsh-')))
+      return { status: 0, stdout: '', stderr: '' }
+    }
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, installDsh: batchInstall, fetchDesktop: registryFetch, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'marketplace', plugins: ['dsh-doublecheck', 'dsh-lens'],
+    })
+    expect(code).toBe(0)
+    expect(added).toContain('dsh-doublecheck@0.9.11')
+    expect(added).toContain('dsh-lens')
+    expect(lines.join('\n')).toContain('钉定 1 个插件')
+  })
+
   it('does not switch the registry when it already is the official one', async () => {
     const home = await tempHome()
     await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })

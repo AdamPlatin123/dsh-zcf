@@ -1043,6 +1043,21 @@ async function fallbackToOfficialRegistry(context: WizardContext, t: T, profile:
 /** Install recommended plugins into a profile; false on first failure. */
 async function installPlugins(context: WizardContext, t: T, profile: string, plugins: readonly RecommendedPlugin[]): Promise<boolean> {
   const { home } = context
+  // Pin every plugin to the version the OFFICIAL registry calls newest before
+  // anything installs: a mirror's `latest` tag can lag behind for days (field
+  // report: a fresh machine on a mirror installed pre-rename plugin builds
+  // that import a since-renamed export and the whole profile failed to boot),
+  // so mirrors stay pure download channels and version truth is official.
+  const specOf = new Map<string, string>()
+  const resolved = await Promise.all(plugins.map(async plugin => {
+    const version = await resolveUpstreamVersion(plugin.id, undefined, context.fetchDesktop)
+    return version === undefined ? undefined : [plugin.id, `${plugin.id}@${version}`] as const
+  }))
+  for (const entry of resolved) {
+    if (entry !== undefined) specOf.set(entry[0], entry[1])
+  }
+  if (specOf.size > 0) context.out(t('pluginsPinned', { count: String(specOf.size) }))
+  const specFor = (plugin: RecommendedPlugin): string => specOf.get(plugin.id) ?? plugin.id
   if (plugins.length > 1) {
     // One batched pnpm run installs every pick in a single resolution pass
     // (measured ~2.4x over per-plugin runs on three plugins); pnpm's own
@@ -1051,7 +1066,7 @@ async function installPlugins(context: WizardContext, t: T, profile: string, plu
     // build scripts and a mirror's missing versions.
     context.out(t('pluginsBatchInstalling', { count: String(plugins.length) }))
     const started = Date.now()
-    const batch = await context.installDsh('dsh', ['plugin', '--profile', profile, 'add', '-w', ...plugins.map(plugin => plugin.id)], (line) => {
+    const batch = await context.installDsh('dsh', ['plugin', '--profile', profile, 'add', '-w', ...plugins.map(plugin => specFor(plugin))], (line) => {
       if (line !== '') context.out(line)
     })
     context.out(t('pluginsBatchElapsed', { seconds: String(Math.round((Date.now() - started) / 1000)) }))
@@ -1072,7 +1087,8 @@ async function installPlugins(context: WizardContext, t: T, profile: string, plu
   }
   for (const plugin of plugins) {
     context.out(t('pluginInstalling', { plugin: plugin.id }))
-    let result = installPlugin(context.run, profile, plugin.id)
+    const spec = specFor(plugin)
+    let result = installPlugin(context.run, profile, spec)
     if (result.status !== 0) {
       const detail = [result.stderr.trim(), result.stdout.trim()].filter(part => part !== '').join('\n')
       // pnpm 10 refuses dependency build scripts unless whitelisted; the
@@ -1083,7 +1099,7 @@ async function installPlugins(context: WizardContext, t: T, profile: string, plu
         try {
           await allowProfileBuilds(home, profile, refused)
           context.out(t('buildsAllowlisted', { deps: refused.join(', '), plugin: plugin.id }))
-          result = installPlugin(context.run, profile, plugin.id)
+          result = installPlugin(context.run, profile, spec)
         } catch {
           // fall through to the loud failure below
         }
@@ -1092,7 +1108,7 @@ async function installPlugins(context: WizardContext, t: T, profile: string, plu
       // announced switch to the official registry (persisted in .npmrc, so
       // later installs inherit it) makes the retry resolve.
       if (result.status !== 0 && await fallbackToOfficialRegistry(context, t, profile, detail)) {
-        result = installPlugin(context.run, profile, plugin.id)
+        result = installPlugin(context.run, profile, spec)
       }
       if (result.status !== 0) {
         // The launcher folds pnpm's own failure into one line, while the real

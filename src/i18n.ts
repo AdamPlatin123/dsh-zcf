@@ -191,6 +191,10 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '模型目录写入失败：{reason}',
     'en': 'Writing the model catalog failed: {reason}',
   },
+  pluginsPinned: {
+    'zh-CN': '已按官方源最新版本钉定 {count} 个插件的安装版本（镜像仅作下载通道，避免镜像 latest 滞后装到旧版）。',
+    'en': 'Pinned {count} plugins to the official registry\'s newest versions before installing (mirrors stay download channels only, so a lagging mirror `latest` cannot serve stale builds).',
+  },
   pluginsBatchInstalling: {
     'zh-CN': '一次性批量安装 {count} 个插件（pnpm 并行下载，进度行实时显示）……',
     'en': 'Batch-installing {count} plugins in one pnpm pass (parallel downloads, live progress lines)…',
@@ -552,8 +556,8 @@ export const MESSAGES: MessageTable = {
     'en': 'model {model} is pinned (visible in the model picker).',
   },
   onboardingManage: {
-    'zh-CN': '日常管理随时 `npx dsh-zcf`：u 更新插件 / k 凭据与模型 / l 卸载插件 / n 逛插件市场。',
-    'en': 'Day-to-day, rerun `npx dsh-zcf` anytime: u update plugins / k credentials & model / l uninstall / n browse the market.',
+    'zh-CN': '日常管理随时 `npx dsh-zcf`：u 更新插件 / k 凭据与模型 / l 卸载插件 / n 逛插件市场。若启动时报「模块缺少导出（does not provide an export）」等装载错误，先跑 u 把插件升到最新版再看。',
+    'en': 'Day-to-day, rerun `npx dsh-zcf` anytime: u update plugins / k credentials & model / l uninstall / n browse the market. If booting reports a loader error like "does not provide an export", run u first to bring the plugins current.',
   },
   onboardingDocs: {
     'zh-CN': '文档与示例：https://github.com/AdamPlatin123/dsh-zcf',
