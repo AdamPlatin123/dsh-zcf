@@ -1040,8 +1040,56 @@ async function fallbackToOfficialRegistry(context: WizardContext, t: T, profile:
   return true
 }
 
+/**
+ * Handle dsh's plugin compatibility gate: since 0.1.7 the launcher refuses a
+ * plugin whose peerDependencies do not match the running dsh ("installation
+ * rejected … incompatible with dsh"). During the ecosystem's catch-up window
+ * the plugin's NEWEST release can still carry an old peer line (verified in
+ * the field: every published dsh-lens pins ^0.0.1-rc.1 peers while dsh ships
+ * 0.1.7), so no version choice can pass the gate — dsh's own escape is the
+ * exact-version exemption. The wizard surfaces that choice instead of dying:
+ * interactive runs are asked (default NO — dsh itself warns the mismatch "may
+ * cause crashes or data loss"), --yes grants it with a loud announcement,
+ * and plain non-interactive runs keep the failure with the exact manual
+ * command.
+ * @param context - injected environment.
+ * @param t - translator.
+ * @param options - resolved command-line options.
+ * @param profile - the profile being installed into.
+ * @param spec - the pinned install spec (for the manual command).
+ * @param detail - the captured failure text.
+ * @returns true when the exemption was granted and a retry is warranted.
+ */
+async function offerVersionExemption(context: WizardContext, t: T, options: DzcfOptions, profile: string, spec: string, detail: string): Promise<boolean> {
+  if (!/installation rejected/.test(detail) || !/incompatible with dsh/.test(detail)) return false
+  // The rejection names the exact plugin@version pair; prefer it over the
+  // pinned spec (a bare-name fallback carries no version for the grant).
+  const exact = /Plugin (\S+@\S+) is incompatible/.exec(detail)?.[1]
+  const target = exact ?? (spec.includes('@') ? spec : undefined)
+  if (target === undefined) return false
+  const dshVersion = context.run('dsh', ['-V']).stdout.trim().split('\n')[0] ?? ''
+  if (dshVersion === '') return false
+  const grant = ['plugin', '--profile', profile, 'allow-version', target, '--dsh-version', dshVersion, '--accept-risk']
+  const manual = `dsh ${grant.join(' ')}`
+  if (context.interactive && !options.yes) {
+    const outcome = await askOne(context.prompt, { type: 'confirm', name: 'exemptVersion', message: t('exemptionAsk', { spec: target, dsh: dshVersion, command: manual }), default: false })
+    if (outcome.status === 'cancelled' || outcome.value.exemptVersion !== true) return false
+  } else if (!context.interactive && !options.yes) {
+    context.err(t('exemptionLoud', { spec: target, dsh: dshVersion, command: manual }))
+    return false
+  }
+  context.out(t('exemptionGranting', { spec: target, dsh: dshVersion }))
+  const allowed = context.run('dsh', grant)
+  if (allowed.status !== 0) {
+    context.err(t('exemptionLoud', { spec: target, dsh: dshVersion, command: manual }))
+    return false
+  }
+  context.out(t('exemptionGranted', { spec: target }))
+  return true
+}
+
 /** Install recommended plugins into a profile; false on first failure. */
-async function installPlugins(context: WizardContext, t: T, profile: string, plugins: readonly RecommendedPlugin[]): Promise<boolean> {
+async function installPlugins(context: WizardContext, t: T, options: DzcfOptions, profile: string, plugins: readonly RecommendedPlugin[]): Promise<boolean> {
   const { home } = context
   // Pin every plugin to the version the OFFICIAL registry calls newest before
   // anything installs: a mirror's `latest` tag can lag behind for days (field
@@ -1108,6 +1156,12 @@ async function installPlugins(context: WizardContext, t: T, profile: string, plu
       // announced switch to the official registry (persisted in .npmrc, so
       // later installs inherit it) makes the retry resolve.
       if (result.status !== 0 && await fallbackToOfficialRegistry(context, t, profile, detail)) {
+        result = installPlugin(context.run, profile, spec)
+      }
+      // dsh's own compatibility gate rejecting the plugin: the exemption
+      // path (asked, or automatic under --yes) is the launcher's designed
+      // escape during the ecosystem's peer-line catch-up.
+      if (result.status !== 0 && await offerVersionExemption(context, t, options, profile, spec, detail)) {
         result = installPlugin(context.run, profile, spec)
       }
       if (result.status !== 0) {
@@ -1403,7 +1457,7 @@ async function runInit(context: WizardContext, t: T, options: DzcfOptions): Prom
   }
   if (!await createProfileWithRecovery(context, t, options, surface, profile)) return 1
   out(t('profileCreated', { profile }))
-  if (!await installPlugins(context, t, profile, plugins)) return 1
+  if (!await installPlugins(context, t, options, profile, plugins)) return 1
 
   if (collected.state.model !== undefined) {
     try {
@@ -1560,7 +1614,7 @@ async function runMarketplace(context: WizardContext, t: T, options: DzcfOptions
     if (!await createProfileWithRecovery(context, t, options, 'web', profile)) return 1
     out(t('profileCreated', { profile }))
   }
-  if (!await installPlugins(context, t, profile, plugins)) return 1
+  if (!await installPlugins(context, t, options, profile, plugins)) return 1
   const verify = run('dsh', ['--profile', profile, '--dump-config'])
   if (verify.status !== 0) {
     err(t('verifyFailed', { mode: profile, stderr: verify.stderr.trim() }))

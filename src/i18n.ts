@@ -195,6 +195,22 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '已按官方源最新版本钉定 {count} 个插件的安装版本（镜像仅作下载通道，避免镜像 latest 滞后装到旧版）。',
     'en': 'Pinned {count} plugins to the official registry\'s newest versions before installing (mirrors stay download channels only, so a lagging mirror `latest` cannot serve stale builds).',
   },
+  exemptionAsk: {
+    'zh-CN': 'dsh 兼容门禁拒绝了 {spec}：其 peerDependencies 尚未跟进 dsh {dsh}（插件生态滞后窗口，已无兼容版本可选）。要授予该精确版本的豁免并重试吗？dsh 自身的警告：不匹配的插件「可能引发崩溃或数据丢失」。[否] 停止安装；手动命令：{command}',
+    'en': 'dsh\'s compatibility gate rejected {spec}: its peerDependencies predate dsh {dsh} (ecosystem catch-up window — no compatible release exists). Grant the exact-version exemption and retry? dsh\'s own warning: a mismatched plugin "may cause crashes or data loss". [No] stops the install; manual command: {command}',
+  },
+  exemptionGranting: {
+    'zh-CN': '正在为 {spec} 授予 dsh {dsh} 下的精确版本豁免……',
+    'en': 'Granting the exact-version exemption for {spec} under dsh {dsh}…',
+  },
+  exemptionGranted: {
+    'zh-CN': '✓ 已为 {spec} 登记豁免，重试安装。',
+    'en': '✓ Exemption registered for {spec}; retrying the install.',
+  },
+  exemptionLoud: {
+    'zh-CN': 'dsh 兼容门禁拒绝了 {spec}（peerDependencies 未跟进 dsh {dsh}，且无兼容版本可选）。非交互模式不代授风险豁免；如需继续，手动执行：{command}，然后重跑本向导。',
+    'en': 'dsh\'s compatibility gate rejected {spec} (peerDependencies predate dsh {dsh}; no compatible release exists). Non-interactive runs do not grant risk exemptions on your behalf; to continue, run manually: {command}, then rerun this wizard.',
+  },
   pluginsBatchInstalling: {
     'zh-CN': '一次性批量安装 {count} 个插件（pnpm 并行下载，进度行实时显示）……',
     'en': 'Batch-installing {count} plugins in one pnpm pass (parallel downloads, live progress lines)…',

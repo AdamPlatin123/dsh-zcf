@@ -1355,6 +1355,68 @@ describe('runWizard — marketplace and manage', () => {
     expect(lines.join('\n')).toContain('钉定 1 个插件')
   })
 
+  it('grants the exact-version exemption and retries when dsh rejects an incompatible plugin under --yes', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } } }))
+    let addCalls = 0
+    const granted: Array<readonly string[]> = []
+    const rejection = 'dsh: installation rejected: Plugin dsh-lens@0.2.5 is incompatible with dsh 0.1.7-rc.2: peerDependencies {"@deepseek-ai/dsh-llm":"^0.0.1-rc.1"}. Running it may cause crashes or data loss.'
+    const run: RunFn = (command, args) => {
+      if (command === 'dsh' && args[0] === 'plugin' && args.includes('add') && args.includes('dsh-lens')) {
+        addCalls += 1
+        return addCalls === 1
+          ? { status: 1, stdout: '', stderr: rejection }
+          : { status: 0, stdout: '', stderr: '' }
+      }
+      if (command === 'dsh' && args[0] === 'plugin' && args.includes('allow-version')) {
+        granted.push(args)
+        return { status: 0, stdout: '', stderr: '' }
+      }
+      if (command === 'dsh' && args[0] === '-V') return { status: 0, stdout: '0.1.7-rc.2\n', stderr: '' }
+      if (command === 'dsh') return { status: 0, stdout: '', stderr: '' }
+      if (command === 'pnpm' || command.endsWith('/pnpm')) return { status: 0, stdout: '10.18.0\n', stderr: '' }
+      return { status: null, stdout: '', stderr: `command not found: ${command}` }
+    }
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'marketplace', plugins: ['dsh-lens'], yes: true,
+    })
+    expect(code).toBe(0)
+    expect(addCalls).toBe(2)
+    expect(granted).toEqual([['plugin', '--profile', 'dzcf', 'allow-version', 'dsh-lens@0.2.5', '--dsh-version', '0.1.7-rc.2', '--accept-risk']])
+    expect(lines.join('\n')).toContain('豁免')
+    expect(lines.join('\n')).toContain('dsh-lens 已安装并登记')
+  })
+
+  it('keeps the rejection loud with the manual grant command in plain non-interactive runs', async () => {
+    const home = await tempHome()
+    await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
+    await writeFile(join(home, 'profiles', 'dzcf', 'package.json'), JSON.stringify({ dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } } }))
+    let granted = 0
+    const run: RunFn = (command, args) => {
+      if (command === 'dsh' && args[0] === 'plugin' && args.includes('allow-version')) {
+        granted += 1
+        return { status: 0, stdout: '', stderr: '' }
+      }
+      if (command === 'dsh' && args[0] === '-V') return { status: 0, stdout: '0.1.7-rc.2\n', stderr: '' }
+      if (command === 'dsh' && args[0] === 'plugin') {
+        return { status: 1, stdout: '', stderr: 'dsh: installation rejected: Plugin dsh-lens@0.2.5 is incompatible with dsh 0.1.7-rc.2: peerDependencies {"@deepseek-ai/dsh-llm":"^0.0.1-rc.1"}.' }
+      }
+      if (command === 'dsh') return { status: 0, stdout: '', stderr: '' }
+      if (command === 'pnpm' || command.endsWith('/pnpm')) return { status: 0, stdout: '10.18.0\n', stderr: '' }
+      return { status: null, stdout: '', stderr: `command not found: ${command}` }
+    }
+    const lines: string[] = []
+    const code = await runWizard(await context({ home, run, ...outputLines(lines) }), {
+      ...OPTIONS, action: 'marketplace', plugins: ['dsh-lens'],
+    })
+    expect(code).toBe(1)
+    expect(granted).toBe(0)
+    expect(lines.join('\n')).toContain('dsh plugin --profile dzcf allow-version dsh-lens@0.2.5 --dsh-version 0.1.7-rc.2 --accept-risk')
+    expect(lines.join('\n')).toContain('非交互模式不代授风险豁免')
+  })
+
   it('does not switch the registry when it already is the official one', async () => {
     const home = await tempHome()
     await mkdir(join(home, 'profiles', 'dzcf'), { recursive: true })
