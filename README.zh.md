@@ -62,6 +62,16 @@ dsh-zcf i --key sk-… --mode web --dry-run    # report the plan, write nothing
 - **其它启动命令**：每个 profile 都能独立启动——`dsh --profile <名字>`；onboarding 会列出本机其它已有 profile 的启动命令。若检测到其它来源的 `dsh-tui` 命令（TUI 项目自带同名命令），向导不再误称「已全局就绪」，也不抢注该命令（避免 EEXIST 冲突）；zcf 的自愈启动器另挂 `dzcf-tui` 别名，始终可用。
 - **旧桌面形态迁移**：0.5.2 及以前 app 形态留下的 `dsh-desktop-app` 文档包会在重跑时自动移除。
 
+### 现场韧性与自愈（0.5.9–0.5.13）
+
+向导在真实机器上报障驱动下积累了一组恢复机制：
+
+- **损坏凭据可修复**（0.5.9）：`.credentials.yaml` 无法解析（YAML 语法坏/非映射结构）时不再死路——坏文件被改名备份为带时间戳的 `.corrupt-` 文件（原样保留、可改名找回），本次以全新文档继续。交互模式弹确认（默认否，重写是显式选择）；`--yes` 自动修复；纯非交互保持响亮失败并指明 `--yes` 出路。
+- **Termux 预检与工具链代装**（0.5.10）：检测到 Termux（Android）环境时，安装 dsh 前先检查 `python`/`make`/`clang`（node-pty 原生编译需要），缺失时代询或 `--yes` 代跑 `pkg install -y python make clang binutils`；非交互也直接给出这行命令而非几分钟后崩溃。
+- **Node 头文件 Android 缺口自愈**（0.5.11）：Android 上所有原生插件的编译都会死在缓存头文件 `~/.cache/node-gyp/<版本>/include/node/common.gypi` 引用未定义的 `android_ndk_path`（上游 gyp-next 已知未修缺口）。预检时自动为该文件补上空默认值（幂等、形状校验），失败路径再补一次并重试安装；该修补经注入槽实现，测试不触碰真实缓存。
+- **插件按官方源钉版**（0.5.12）：安装任何插件前并行向官方 registry 解析其最新可用版本并以 `插件名@版本` 安装——镜像仅作下载通道（镜像 `latest` 标签可能滞后数日，曾把改名前的旧构建装给新 dsh 导致启动装载错误）；解析失败回退裸名。启动若报「does not provide an export」类错误，先跑 `u` 更新插件。
+- **dsh 兼容门禁的豁免路径**（0.5.13）：dsh 0.1.7 起硬校验插件 peerDependencies，不匹配直接拒绝安装（而插件生态的 peer 声明可能整体滞后，无任何版本可选）。向导识别该拒绝后驱动 dsh 官方的 `allow-version` 精确版本豁免：交互问询（默认否，原文转述 dsh 的「可能引发崩溃或数据丢失」警告）；`--yes` 授权并播报；非交互给出精确手动命令；授权后自动重试安装。
+
 ## 参数
 
 | 参数 | 含义 |

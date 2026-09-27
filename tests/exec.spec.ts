@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, readFile, writeFile, chmod, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { delimiter, join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { isTermux, patchNodeGypAndroidDefault, resolveUpstreamVersion, whichOnPath, windowsSpawnArgs } from '../src/exec.ts'
 
@@ -35,23 +35,18 @@ describe('patchNodeGypAndroidDefault', () => {
     const cache = await tempDir()
     const one = join(cache, '24.20.0', 'include', 'node', 'common.gypi')
     const two = join(cache, '22.12.0', 'include', 'node', 'common.gypi')
-    await mkdir(dirnameOf(one), { recursive: true })
-    await mkdir(dirnameOf(two), { recursive: true })
+    await mkdir(dirname(one), { recursive: true })
+    await mkdir(dirname(two), { recursive: true })
     await writeFile(one, `['OS == "android"', {\n      'variables': { 'android_ndk_path%': '' },\n      ${ANDROID_BRANCH.replace(/^.*\n\s*/, '')}`)
     await writeFile(two, 'conditions: [\n    ["OS == "win32", { }]\n  ]')
     expect(patchNodeGypAndroidDefault(cache)).toEqual([])
     // A file with the reference but an unknown surrounding shape stays untouched.
     const three = join(cache, '20.0.0', 'include', 'node', 'common.gypi')
-    await mkdir(dirnameOf(three), { recursive: true })
+    await mkdir(dirname(three), { recursive: true })
     await writeFile(three, 'custom: <(android_ndk_path)')
     expect(patchNodeGypAndroidDefault(cache)).toEqual([])
   })
 })
-
-/** dirname helper kept local to avoid importing node:path twice. */
-function dirnameOf(path: string): string {
-  return path.slice(0, path.lastIndexOf('/'))
-}
 
 const tempDirs: string[] = []
 

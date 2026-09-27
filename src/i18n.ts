@@ -63,6 +63,10 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '✓ 工具链已就绪。',
     'en': '✓ Toolchain ready.',
   },
+  termuxToolchainFailed: {
+    'zh-CN': '工具链安装失败：{reason}',
+    'en': 'Toolchain installation failed: {reason}',
+  },
   termuxGypHint: {
     'zh-CN': '提示：这是 node-pty 原生编译失败——Termux 下先 `pkg install python make clang binutils` 再重试；其它平台请安装 Python 3 与构建工具。',
     'en': 'Hint: this is node-pty failing its native build — under Termux run `pkg install python make clang binutils` first, then retry; elsewhere install Python 3 and build tools.',
@@ -206,6 +210,10 @@ export const MESSAGES: MessageTable = {
   exemptionGranted: {
     'zh-CN': '✓ 已为 {spec} 登记豁免，重试安装。',
     'en': '✓ Exemption registered for {spec}; retrying the install.',
+  },
+  exemptionGrantFailed: {
+    'zh-CN': '豁免登记命令失败：{reason}',
+    'en': 'The exemption grant command failed: {reason}',
   },
   exemptionLoud: {
     'zh-CN': 'dsh 兼容门禁拒绝了 {spec}（peerDependencies 未跟进 dsh {dsh}，且无兼容版本可选）。非交互模式不代授风险豁免；如需继续，手动执行：{command}，然后重跑本向导。',

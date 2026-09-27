@@ -19,7 +19,7 @@ import { isHttpUrl, type DzcfAction, type DzcfOptions } from './args.ts'
 import { API_KEY_REF, BASE_URL_REF, MESSAGES, PUBLIC_BASE_URL, translate, type Lang } from './i18n.ts'
 import type { PromptFn, PromptOutcome, PromptQuestion } from './ui.ts'
 import type { RunFn, RunResult } from './exec.ts'
-import { detectPackageManager, dshAvailable, installDshArgs, isTermux, patchNodeGypAndroidDefault, REGISTRY_OPTIONS, resolveUpstreamVersion, TERMUX_TOOLCHAIN } from './exec.ts'
+import { detectPackageManager, dshAvailable, installDshArgs, isTermux, REGISTRY_OPTIONS, resolveUpstreamVersion, TERMUX_TOOLCHAIN } from './exec.ts'
 import { backupCorruptCredentials, ensureHomeDirectory, maskKey, migrateCredentialsIfNeeded, needsV1Migration, readCredentials, writeCredentials } from './credentials.ts'
 import { writeEnvFile } from './dotenv.ts'
 import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, readDefaultProfile, readProfileRegistry, removePlugin, setPnpmBinOverride, writeDefaultProfile, writeProfileNpmrc } from './profile.ts'
@@ -52,6 +52,8 @@ export interface WizardContext {
   probeWeb: (url: string) => Promise<boolean>
   /** Whether DSH Desktop is already installed (skips the installer download). */
   desktopInstalled: () => boolean
+  /** Node-headers Android-default patcher; returns the files it touched. */
+  patchNodeGypAndroid: () => readonly string[]
   /** Interactive prompt implementation. */
   prompt: PromptFn
   /** True when stdin and stdout are both a TTY. */
@@ -345,7 +347,7 @@ async function ensureTermuxToolchain(context: WizardContext, t: T, options: Dzcf
   if (!isTermux()) return true
   // Before anything compiles: patch the cached Node headers' Android default
   // gap (every native addon dies on the undefined android_ndk_path otherwise).
-  for (const gypi of patchNodeGypAndroidDefault()) context.out(t('termuxGypPatched', { path: gypi }))
+  for (const gypi of context.patchNodeGypAndroid()) context.out(t('termuxGypPatched', { path: gypi }))
   if (TERMUX_TOOLCHAIN.every(tool => which(tool) !== undefined)) return true
   const command = `pkg install -y ${TERMUX_TOOLCHAIN.join(' ')} binutils`
   if (!context.interactive && !options.yes) {
@@ -362,6 +364,7 @@ async function ensureTermuxToolchain(context: WizardContext, t: T, options: Dzcf
   out(t('termuxToolchainInstalling', { command }))
   const install = run('pkg', ['install', '-y', ...TERMUX_TOOLCHAIN, 'binutils'])
   if (install.status !== 0) {
+    err(t('termuxToolchainFailed', { reason: install.stderr.trim() }))
     err(t('termuxToolchainLoud', { command }))
     return false
   }
@@ -416,7 +419,7 @@ async function ensureDsh(context: WizardContext, t: T, options: DzcfOptions): Pr
   if (install.status !== 0 && isTermux() && /android_ndk_path/.test(install.stderr)) {
     // The headers may have been re-downloaded (fresh cache) after the
     // preflight patch; heal again and retry once before giving up.
-    const patched = patchNodeGypAndroidDefault()
+    const patched = context.patchNodeGypAndroid()
     if (patched.length > 0) {
       for (const gypi of patched) out(t('termuxGypPatched', { path: gypi }))
       out(t('installing', { command: `${pm} ${args.join(' ')}` }))
@@ -1081,6 +1084,7 @@ async function offerVersionExemption(context: WizardContext, t: T, options: Dzcf
   context.out(t('exemptionGranting', { spec: target, dsh: dshVersion }))
   const allowed = context.run('dsh', grant)
   if (allowed.status !== 0) {
+    context.err(t('exemptionGrantFailed', { reason: allowed.stderr.trim() }))
     context.err(t('exemptionLoud', { spec: target, dsh: dshVersion, command: manual }))
     return false
   }
@@ -1177,7 +1181,6 @@ async function installPlugins(context: WizardContext, t: T, options: DzcfOptions
   return true
 }
 
-/** Fully-collected init state after the step loop resolves. */
 /**
  * Read the stored credentials, or when the document is unparseable, offer the
  * repair path: the broken file is moved aside (timestamped backup, nothing

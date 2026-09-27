@@ -61,6 +61,16 @@ Rerunning the wizard on a machine that already has configuration:
 - **Other launch commands**: every profile starts independently with `dsh --profile <name>`; the onboarding lists the launch commands for the machine's other profiles. When a foreign `dsh-tui` command is detected (the TUI project ships the same name), the wizard no longer claims it ready and never fights over the name (no EEXIST); its own self-healing launcher is always available as the `dzcf-tui` alias.
 - **Legacy desktop migration**: the `dsh-desktop-app` doc bundle left by app surfaces from 0.5.2 and earlier is removed automatically on the next run.
 
+### Field resilience and self-healing (0.5.9–0.5.13)
+
+A set of recovery mechanisms accumulated from field reports on real machines:
+
+- **Repairable corrupt credentials** (0.5.9): an unparseable `.credentials.yaml` (broken YAML syntax / non-mapping shape) is no longer a dead end — the broken file is renamed to a timestamped `.corrupt-` backup (kept verbatim, recoverable by renaming back) and the run continues on a fresh document. Interactive runs ask (default NO — a rewrite stays an explicit choice); `--yes` auto-repairs; plain non-interactive runs keep the loud failure with the `--yes` escape spelled out.
+- **Termux preflight and toolchain install** (0.5.10): under Termux (Android) the wizard checks `python`/`make`/`clang` (needed to compile node-pty natively) before installing dsh, offers to run `pkg install -y python make clang binutils` (or runs it under `--yes`); non-interactive runs get that one line up front instead of a crash minutes later.
+- **Node-headers Android gap self-heal** (0.5.11): on Android every native addon build dies on the cached headers (`~/.cache/node-gyp/<ver>/include/node/common.gypi`) referencing an undefined `android_ndk_path` (a known unfixed gyp-next gap). The preflight adds the missing empty default to that file (idempotent, shape-checked), the failure path patches again and retries the install once; the patch goes through an injected seam, so tests never touch the real cache.
+- **Plugins pinned to official-registry versions** (0.5.12): before any plugin installs, the wizard resolves its newest usable version from the OFFICIAL registry in parallel and installs `pkg@version` specs — mirrors stay pure download channels (a mirror's `latest` tag can lag days behind and once served pre-rename builds that broke profile booting); a failed lookup falls back to the bare name. A boot-time "does not provide an export" error means running `u` first.
+- **The exemption path across dsh's compatibility gate** (0.5.13): dsh 0.1.7+ hard-checks plugin peerDependencies and rejects mismatches outright (while the ecosystem's peer declarations can lag wholesale, leaving no compatible release to pick). The wizard recognizes the rejection and drives dsh's own `allow-version` exact-version exemption: an interactive ask (default NO, quoting dsh's "may cause crashes or data loss" warning verbatim), `--yes` grants with a loud announcement, non-interactive runs get the exact manual command, and a granted exemption retries the install.
+
 ## Options
 
 | Option | Meaning |

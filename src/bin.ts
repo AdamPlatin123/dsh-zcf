@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { CommanderError } from 'commander'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { parseDzcfArgs } from './args.ts'
-import { fetchUpstreamModels, installDshStreaming, probeRegistryLatency, probeWebReady, runCommand, runDetached, runInteractive, whichOnPath } from './exec.ts'
+import { fetchUpstreamModels, installDshStreaming, patchNodeGypAndroidDefault, probeRegistryLatency, probeWebReady, runCommand, runDetached, runInteractive, whichOnPath } from './exec.ts'
 import { createPromptPort } from './ui.ts'
 import { detectInstalledDesktop } from './desktop.ts'
 import { runWizard } from './wizard.ts'
@@ -44,6 +44,7 @@ const main = async (): Promise<void> => {
     runDetached,
     probeWeb: probeWebReady,
     desktopInstalled: () => detectInstalledDesktop(),
+    patchNodeGypAndroid: () => patchNodeGypAndroidDefault(),
     prompt: createPromptPort(),
     interactive: process.stdin.isTTY && process.stdout.isTTY,
     out: text => process.stdout.write(`${text}\n`),
