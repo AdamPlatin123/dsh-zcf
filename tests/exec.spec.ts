@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, writeFile, chmod, rm } from 'node:fs/promises
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { isTermux, patchNodeGypAndroidDefault, resolveUpstreamVersion, whichOnPath, windowsSpawnArgs } from '../src/exec.ts'
+import { declaredBundleVersion, isTermux, patchNodeGypAndroidDefault, resolveUpstreamVersion, whichOnPath, windowsSpawnArgs } from '../src/exec.ts'
 
 describe('isTermux', () => {
   it('detects Termux through its own markers', () => {
@@ -10,6 +10,39 @@ describe('isTermux', () => {
     expect(isTermux({ PREFIX: '/data/data/com.termux/files/usr' } as NodeJS.ProcessEnv)).toBe(true)
     expect(isTermux({} as NodeJS.ProcessEnv)).toBe(false)
     expect(isTermux({ PREFIX: '/usr' } as NodeJS.ProcessEnv)).toBe(false)
+  })
+})
+
+describe('declaredBundleVersion', () => {
+  /** Lay out a fake installed dsh package with the given web-app declaration. */
+  const fakeDsh = async (declaration: string | undefined): Promise<string> => {
+    const root = await tempDir()
+    const pkgDir = join(root, 'node_modules', '@deepseek-ai', 'dsh')
+    await mkdir(join(pkgDir, 'lib'), { recursive: true })
+    await writeFile(join(pkgDir, 'lib', 'bin.js'), '#!/usr/bin/env node\n')
+    const manifest: Record<string, unknown> = { name: '@deepseek-ai/dsh', version: '0.1.7-rc.2' }
+    if (declaration !== undefined) manifest.dependencies = { '@deepseek-ai/dsh-web-app': declaration }
+    await writeFile(join(pkgDir, 'package.json'), JSON.stringify(manifest))
+    return join(pkgDir, 'lib', 'bin.js')
+  }
+
+  it('returns the exact pin the installed dsh declares for the bundle', async () => {
+    const bin = await fakeDsh('0.1.7-rc.2')
+    expect(declaredBundleVersion(bin, '@deepseek-ai/dsh-web-app')).toBe('0.1.7-rc.2')
+  })
+
+  it('returns undefined for range declarations, missing deps, and foreign paths', async () => {
+    const ranged = await fakeDsh('^0.1.2-rc.1')
+    expect(declaredBundleVersion(ranged, '@deepseek-ai/dsh-web-app')).toBeUndefined()
+    const bare = await fakeDsh(undefined)
+    expect(declaredBundleVersion(bare, '@deepseek-ai/dsh-web-app')).toBeUndefined()
+    expect(declaredBundleVersion('/usr/local/bin/dsh', '@deepseek-ai/dsh-web-app')).toBeUndefined()
+  })
+
+  it('slices Windows-shaped backslash paths at the same indexes', async () => {
+    const bin = await fakeDsh('0.1.7-rc.2')
+    const winShape = bin.replace(/\//g, '\\')
+    expect(declaredBundleVersion(winShape, '@deepseek-ai/dsh-web-app')).toBe('0.1.7-rc.2')
   })
 })
 

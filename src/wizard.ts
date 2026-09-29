@@ -10,7 +10,7 @@
 import { tmpdir } from 'node:os'
 import { readFileSync } from 'node:fs'
 import { readdir, rm } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { dshHomeDisplay } from '@deepseek-ai/dsh-home-paths'
 import { renderBanner, renderMenuLines, type MenuAction } from './banner.ts'
 import { CAPABILITIES, capabilityOf, SURFACE_BUNDLES, type Capability, type PatchRow, type Surface } from './capabilities.ts'
@@ -19,7 +19,7 @@ import { isHttpUrl, type DzcfAction, type DzcfOptions } from './args.ts'
 import { API_KEY_REF, BASE_URL_REF, MESSAGES, PUBLIC_BASE_URL, translate, type Lang } from './i18n.ts'
 import type { PromptFn, PromptOutcome, PromptQuestion } from './ui.ts'
 import type { RunFn, RunResult } from './exec.ts'
-import { detectPackageManager, dshAvailable, installDshArgs, isTermux, REGISTRY_OPTIONS, resolveUpstreamVersion, TERMUX_TOOLCHAIN } from './exec.ts'
+import { declaredBundleVersion, detectPackageManager, dshAvailable, installDshArgs, isTermux, REGISTRY_OPTIONS, resolveUpstreamVersion, TERMUX_TOOLCHAIN } from './exec.ts'
 import { backupCorruptCredentials, ensureHomeDirectory, maskKey, migrateCredentialsIfNeeded, needsV1Migration, readCredentials, writeCredentials } from './credentials.ts'
 import { writeEnvFile } from './dotenv.ts'
 import { allowProfileBuilds, createProfile, installCapability, installModelCatalog, installPlugin, listProfileBundles, readDefaultProfile, readProfileRegistry, removePlugin, setPnpmBinOverride, writeDefaultProfile, writeProfileNpmrc } from './profile.ts'
@@ -954,11 +954,61 @@ async function resolveSurfaceBundleSpec(context: WizardContext, t: T, surface: S
   const staticSpec = SURFACE_BUNDLES[surface]
   if (surface === 'tui') return staticSpec
   const pkg = staticSpec.split('@').slice(0, 2).join('@')
+  // Authority first: the installed dsh's own dependency table pins the exact
+  // bundle version it pairs with — registry tags are not an answer (the
+  // `next` tag once ran ahead to a line for an unreleased dsh while `latest`
+  // still pointed at a broken build; the gate then rejected the profile's
+  // own surface bundle).
+  const declared = declaredSurfaceVersion(context, pkg)
+  if (declared !== undefined) {
+    context.out(t('bundleVersionDeclared', { pkg, version: declared }))
+    return `${pkg}@${declared}`
+  }
   const dshVersion = context.run('dsh', ['-V']).stdout.trim().split('\n')[0] ?? ''
   const resolved = await resolveUpstreamVersion(pkg, dshVersion, context.fetchDesktop)
   if (resolved === undefined) return staticSpec
   context.out(t('bundleVersionResolved', { pkg, version: resolved }))
   return `${pkg}@${resolved}`
+}
+
+/**
+ * Resolve the installed dsh bin to its real path and read the exact pinned
+ * version it declares for a bundle package.
+ * @param context - injected environment.
+ * @param pkg - bundle package name.
+ * @returns the declared exact version, or undefined when unresolvable.
+ */
+function declaredSurfaceVersion(context: WizardContext, pkg: string): string | undefined {
+  const binPath = context.which('dsh')
+  if (binPath === undefined) return undefined
+  let realPath: string | undefined
+  if (process.platform === 'win32') {
+    try {
+      realPath = windowsShimTarget(readFileSync(binPath, 'utf8'), binPath)
+    } catch {
+      realPath = undefined
+    }
+  } else {
+    const real = context.run('bash', ['-lc', `readlink -f "${binPath}" || true`])
+    realPath = real.status === 0 ? real.stdout.trim() : undefined
+  }
+  if (realPath === undefined || realPath === '') return undefined
+  return declaredBundleVersion(realPath, pkg)
+}
+
+/**
+ * Extract the node script target out of an npm Windows cmd-shim body. The
+ * shim runs `node "%~dp0\..\node_modules\<pkg>\..."` — the quoted path,
+ * resolved against the shim's own directory, is the real bin path.
+ * @param shimBody - the .cmd shim file text.
+ * @param shimPath - the shim file's own path (for %~dp0).
+ * @returns the resolved target path, or undefined when the body has no
+ *          recognizable quoted target.
+ */
+function windowsShimTarget(shimBody: string, shimPath: string): string | undefined {
+  const match = /"%~dp0([^"]+)"/.exec(shimBody)
+  if (match === null || match[1] === undefined) return undefined
+  return resolve(dirname(shimPath), `.${match[1]}`)
 }
 
 /**

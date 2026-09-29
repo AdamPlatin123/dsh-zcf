@@ -203,6 +203,40 @@ export const TERMUX_TOOLCHAIN: readonly string[] = ['python', 'make', 'clang']
 const ANDROID_GYPI_NEEDLE = "'cflags': [ '-fPIC', '-I<(android_ndk_path)/sources/android/cpufeatures' ]"
 
 /**
+ * The exact bundle version the installed dsh itself declares as its
+ * compatible pair. The launcher's own dependency table is the only authority
+ * on pairing — registry tags are not (the `next` tag can run ahead to a line
+ * for an unreleased dsh while `latest` still points at a broken build, and
+ * both were seen in the field). Only an exact pin counts as an answer: a
+ * range declaration carries no version to install and falls back to the
+ * caller's resolution chain.
+ * @param binPath - the dsh bin's real path (symlinks already resolved).
+ * @param pkg - the bundle package name to look up.
+ * @returns the declared exact version, or undefined when the package root
+ *          cannot be located, is unreadable, or declares no exact pin.
+ */
+export function declaredBundleVersion(binPath: string, pkg: string): string | undefined {
+  // Backslash-to-slash keeps string length, so slice indexes stay valid on
+  // the original platform-separated path. The marker is the HOST package the
+  // bin lives in (dsh); the dependency table inside it names the target pkg.
+  const marker = 'node_modules/@deepseek-ai/dsh'
+  const normalized = binPath.replace(/\\/g, '/')
+  const at = normalized.lastIndexOf(marker)
+  if (at === -1) return undefined
+  // Forward slashes work on every platform's fs; the normalized slice avoids
+  // joining a backslash string with a forward-slash separator.
+  const root = normalized.slice(0, at + marker.length)
+  try {
+    const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { dependencies?: Record<string, unknown> }
+    const declared = manifest.dependencies?.[pkg]
+    // An exact pin only: ranges carry no installable version.
+    return typeof declared === 'string' && declared !== '' && !/[><~^|\s]/.test(declared) ? declared : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Patch the cached Node headers' `common.gypi` so Android addon builds stop
  * failing on an undefined `android_ndk_path`. The variable lives in the
  * headers node-gyp downloads (`~/.cache/node-gyp/<ver>/include/node/

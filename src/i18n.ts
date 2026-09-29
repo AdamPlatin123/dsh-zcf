@@ -243,6 +243,10 @@ export const MESSAGES: MessageTable = {
     'zh-CN': '已解析 {pkg} 的最新可用版本：{version}（与已安装的 dsh 版本线对齐；解析失败时会回退到内置版本区间）',
     'en': 'Resolved the newest usable {pkg}: {version} (aligned with the installed dsh line; the built-in range stays as the fallback)',
   },
+  bundleVersionDeclared: {
+    'zh-CN': '已按已安装 dsh 自身的依赖声明采用 {pkg}@{version}（官方兼容契约；注册表标签不作数）',
+    'en': 'Using {pkg}@{version} per the installed dsh\'s own dependency declaration (the official pairing contract; registry tags do not decide)',
+  },
   webAlreadyRunning: {
     'zh-CN': '✓ Web 服务已在运行：{url}（浏览器打开即可；重启它会先停掉后台进程）',
     'en': '✓ The web service is already running: {url} (open it in a browser; restarting it means stopping the background process first)',
