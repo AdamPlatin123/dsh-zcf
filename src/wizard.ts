@@ -912,6 +912,21 @@ async function createProfileWithRecovery(
     await writeDefaultProfile(home, profile)
     return true
   }
+  // The compatibility gate rejecting the surface bundle itself is a dead
+  // end for version choice — the exemption path is the escape, exactly as
+  // for plugins (asked interactively, automatic under --yes, loud with the
+  // manual command otherwise).
+  {
+    const detail = [create.stderr.trim(), create.stdout.trim()].filter(part => part !== '').join('\n')
+    if (await offerVersionExemption(context, t, options, profile, bundleSpec, detail)) {
+      create = createProfile(run, surface, profile, bundleSpec)
+      if (create.status === 0) {
+        await allowProfileBuilds(home, profile)
+        await writeDefaultProfile(home, profile)
+        return true
+      }
+    }
+  }
   if (!(context.interactive || options.yes)) {
     fail(create)
     return false
@@ -952,18 +967,23 @@ async function createProfileWithRecovery(
  */
 async function resolveSurfaceBundleSpec(context: WizardContext, t: T, surface: Surface): Promise<string> {
   const staticSpec = SURFACE_BUNDLES[surface]
-  if (surface === 'tui') return staticSpec
   const pkg = staticSpec.split('@').slice(0, 2).join('@')
-  // Authority first: the installed dsh's own dependency table pins the exact
-  // bundle version it pairs with — registry tags are not an answer (the
-  // `next` tag once ran ahead to a line for an unreleased dsh while `latest`
-  // still pointed at a broken build; the gate then rejected the profile's
-  // own surface bundle).
-  const declared = declaredSurfaceVersion(context, pkg)
-  if (declared !== undefined) {
-    context.out(t('bundleVersionDeclared', { pkg, version: declared }))
-    return `${pkg}@${declared}`
+  // Authority first for the web-composed surfaces: the installed dsh's own
+  // dependency table pins the exact bundle version it pairs with — registry
+  // tags are not an answer (the `next` tag once ran ahead to a line for an
+  // unreleased dsh while `latest` still pointed at a broken build; the gate
+  // then rejected the profile's own surface bundle).
+  if (surface !== 'tui') {
+    const declared = declaredSurfaceVersion(context, pkg)
+    if (declared !== undefined) {
+      context.out(t('bundleVersionDeclared', { pkg, version: declared }))
+      return `${pkg}@${declared}`
+    }
   }
+  // The tui bundle is a standalone official package the launcher does not
+  // declare, so its version comes from the registry — with the launcher's
+  // version as the gate-compatibility filter (its newest releases can pin
+  // peers for an unreleased dsh line and would be rejected on install).
   const dshVersion = context.run('dsh', ['-V']).stdout.trim().split('\n')[0] ?? ''
   const resolved = await resolveUpstreamVersion(pkg, dshVersion, context.fetchDesktop)
   if (resolved === undefined) return staticSpec

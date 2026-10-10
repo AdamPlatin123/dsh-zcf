@@ -493,7 +493,7 @@ const UPSTREAM_TIMEOUT_MS = 8000
  *          caller keeps its static-range fallback for that case.
  */
 export async function resolveUpstreamVersion(pkg: string, lineHint?: string, fetchImpl: (url: string) => Promise<Response> = fetch, registry = 'https://registry.npmjs.org'): Promise<string | undefined> {
-  let document: { 'dist-tags'?: Record<string, string>; versions?: string[] | Record<string, unknown> }
+  let document: { 'dist-tags'?: Record<string, string>; versions?: string[] | Record<string, { peerDependencies?: Record<string, string> }> }
   try {
     // The injected fetcher (the wizard context's desktop fetch slot) carries
     // no signal of its own, so the timeout is a race around the call.
@@ -507,6 +507,7 @@ export async function resolveUpstreamVersion(pkg: string, lineHint?: string, fet
     return undefined
   }
   const tags = document['dist-tags'] ?? {}
+  const versionTable = Array.isArray(document.versions) ? undefined : document.versions
   const versions = Array.isArray(document.versions) ? document.versions : Object.keys(document.versions ?? {})
   const isAlpha = (version: string): boolean => /-(alpha|beta)\./.test(version)
   const usable = (version: string | undefined): version is string => version !== undefined && version !== '' && !isAlpha(version) && versions.includes(version)
@@ -518,20 +519,39 @@ export async function resolveUpstreamVersion(pkg: string, lineHint?: string, fet
     const [bMajor, bMinor, bPatch, bRc] = parse(b)
     return aMajor - bMajor || aMinor - bMinor || aPatch - bPatch || (aRc ?? -1) - (bRc ?? -1)
   }
-  // Newest first: upstream pairs the bundle with the launcher on the `next`
-  // tag, so taking it already aligns the common case (old-bundle-under-new-dsh
-  // is exactly what `next` heals). The launcher's own line and the highest
-  // non-alpha are fallbacks for when no tag is usable — pinning the line up
-  // front would drag a fresh install back onto an old, broken one.
-  if (usable(tags.next)) return tags.next
-  if (usable(tags.latest)) return tags.latest
+  // dsh 0.1.7's gate rejects any package whose dsh-side peers pin a line
+  // NEWER than the installed launcher (releases paired with an unreleased
+  // dsh). With the launcher's own version known, such versions are filtered
+  // out up front — they can never install, and an older release that pairs
+  // with this launcher is the right pick (verified: the tui bundle's 0.12+
+  // peers pin the 0.2.0 line and are all rejected, while 0.11.2 installs
+  // cleanly).
+  const launcherLine = lineHint === undefined ? undefined : /^(\d+)\.(\d+)\./.exec(lineHint)?.slice(1, 3).map(Number) as [number, number] | undefined
+  const peerAheadOfLauncher = (version: string): boolean => {
+    if (launcherLine === undefined || versionTable === undefined) return false
+    const peers = versionTable[version]?.peerDependencies
+    if (peers === undefined) return false
+    return Object.entries(peers).some(([name, range]) => {
+      if (!name.startsWith('@deepseek-ai/dsh-') || name === '@deepseek-ai/dsh') return false
+      // Destructuring a matchAll entry would yield [fullMatch, group1]; the
+      // groups are the line coordinates, addressed explicitly.
+      for (const match of range.matchAll(/(\d+)\.(\d+)\.\d+/g)) {
+        if (Number(match[1]) > launcherLine[0] || (Number(match[1]) === launcherLine[0] && Number(match[2]) > launcherLine[1])) return true
+      }
+      return false
+    })
+  }
+  const candidates = versions.filter(version => !isAlpha(version) && !peerAheadOfLauncher(version)).sort(bySemver)
+  // Newest first among gate-compatible versions: the `next`/`latest` tags
+  // still decide when they are themselves compatible.
+  if (usable(tags.next) && candidates.includes(tags.next)) return tags.next
+  if (usable(tags.latest) && candidates.includes(tags.latest)) return tags.latest
   if (lineHint !== undefined) {
     const line = /^(\d+\.\d+)\./.exec(lineHint)?.[1]
     if (line !== undefined) {
-      const onLine = versions.filter(version => version.startsWith(`${line}.`) && !isAlpha(version)).sort(bySemver)
+      const onLine = candidates.filter(version => version.startsWith(`${line}.`))
       if (onLine.length > 0) return onLine.at(-1)
     }
   }
-  const sane = versions.filter(version => !isAlpha(version)).sort(bySemver)
-  return sane.at(-1)
+  return candidates.at(-1)
 }

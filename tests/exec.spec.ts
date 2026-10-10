@@ -200,4 +200,27 @@ describe('resolveUpstreamVersion', () => {
     const throwing = async (): Promise<Response> => { throw new Error('offline') }
     expect(await resolveUpstreamVersion('pkg', undefined, throwing)).toBeUndefined()
   })
+
+  it('skips versions whose dsh-side peers pin a line newer than the launcher', async () => {
+    const table = {
+      '0.11.2': {},
+      '0.12.0': { peerDependencies: { '@deepseek-ai/dsh-host-webserver': '0.2.0-rc.1 || 0.2.0-rc.2' } },
+      '0.14.1': { peerDependencies: { '@deepseek-ai/dsh-host-webserver': '0.2.0-rc.1 || 0.2.0-rc.2' } },
+    }
+    const fetchImpl = async (): Promise<Response> => new Response(JSON.stringify({ 'dist-tags': { latest: '0.14.1' }, versions: table }), { status: 200 })
+    // latest (0.14.1) is gate-incompatible on a 0.1.7 launcher — the newest
+    // compatible release wins.
+    expect(await resolveUpstreamVersion('pkg', '0.1.7-rc.2', fetchImpl)).toBe('0.11.2')
+    // Without a launcher version the filter stays off (no signal to filter by).
+    expect(await resolveUpstreamVersion('pkg', undefined, fetchImpl)).toBe('0.14.1')
+  })
+
+  it('keeps versions whose dsh peers only mention lines at or below the launcher', async () => {
+    const table = {
+      '0.9.0': { peerDependencies: { '@deepseek-ai/dsh-llm': '^0.0.1-rc.1' } },
+      '0.10.0': { peerDependencies: { '@deepseek-ai/dsh-llm': '0.1.7-rc.2' } },
+    }
+    const fetchImpl = async (): Promise<Response> => new Response(JSON.stringify({ 'dist-tags': { latest: '0.10.0' }, versions: table }), { status: 200 })
+    expect(await resolveUpstreamVersion('pkg', '0.1.7-rc.2', fetchImpl)).toBe('0.10.0')
+  })
 })
